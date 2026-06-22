@@ -1,169 +1,270 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Crowd Brawler 3D</title>
-    <meta name="description" content="Lead your crowd to victory through gates, battles, and biomes in Crowd Brawler 3D — a fast-paced 3D runner." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#00e5ff">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./style.css">
-  </head>
-  <body>
-    <div id="ui">
 
-      <!-- ══════════ VISUAL OVERLAYS ══════════ -->
-      <div id="flash-overlay"></div>
-      <div id="vignette-overlay"></div>
-      <div id="speed-lines"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Crowd Brawler 3D</title>
+  <meta name="description"
+    content="Lead your crowd to victory through gates, battles, and biomes in Crowd Brawler 3D — a fast-paced 3D runner." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#00e5ff">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
 
-      <!-- ══════════ IN-GAME HUD ══════════ -->
-      <div id="score-display" style="display:none;">
-        <div id="hud-top">
-          <div class="hud-pill" id="hud-level">Level <span id="current-level-display">1</span></div>
-          <div class="hud-pill" id="hud-troops">⚔ <span id="troop-count">1</span></div>
-          <div class="hud-pill" id="hud-coins">🪙 <span id="run-coins">0</span></div>
-        </div>
-        <div id="powerup-badges" style="display: flex; gap: 8px; margin-top: 4px; pointer-events: none;">
-          <div id="badge-speed" style="display:none; background: linear-gradient(135deg, #00ffff, #0088ff); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">⚡ SPEED</div>
-          <div id="badge-shield" style="display:none; background: linear-gradient(135deg, #ffaa00, #ff5500); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">🛡 SHIELD</div>
-          <div id="badge-magnet" style="display:none; background: linear-gradient(135deg, #ff00ff, #aa00aa); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">✨ MAGNET</div>
-        </div>
-        <div id="progress-bar-wrap">
-          <div id="progress-bar-fill"></div>
-          <span id="progress-label">0%</span>
-        </div>
-        <button id="pause-btn" title="Pause (P)">⏸</button>
+<body>
+  <!-- ══════════ LOADING SCREEN ══════════ -->
+  <div id="loading-screen" class="screen"
+    style="z-index:100; background:#0a0a16; display:flex; flex-direction:column; gap:24px;">
+    <div class="loading-logo">
+      <div class="logo-icon" style="font-size:64px;">⚔</div>
+      <h1
+        style="font-family:'Rajdhani',sans-serif;font-size:32px;color:#00e5ff;text-shadow:0 0 30px rgba(0,229,255,0.5);letter-spacing:2px;text-transform:uppercase;">
+        Crowd Brawler</h1>
+    </div>
+    <div class="loading-bar-wrap"
+      style="width:200px;height:4px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;">
+      <div id="loading-bar-fill"
+        style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#0077ff);transition:width 0.3s ease;">
       </div>
+    </div>
+    <div id="loading-text" style="font-family:'Inter',sans-serif;font-size:12px;color:rgba(255,255,255,0.4);">Loading
+      assets...</div>
+  </div>
 
-      <!-- ══════════ MAIN MENU ══════════ -->
-      <div id="start-screen" class="screen">
-        <div class="screen-inner">
-          <div class="game-logo">
-            <div class="logo-icon">⚔</div>
-            <h1>Crowd Brawler <span class="logo-3d">3D</span></h1>
-            <p class="tagline">Build your army. Crush your enemies.</p>
+  <!-- ══════════ WEBGL ERROR ══════════ -->
+  <div id="webgl-error"
+    style="display:none;position:fixed;inset:0;z-index:200;background:#0a0a16;align-items:center;justify-content:center;flex-direction:column;padding:32px;gap:16px;text-align:center;color:white;font-family:'Inter',sans-serif;">
+    <div style="font-size:48px;">⚠️</div>
+    <h2 style="font-family:'Rajdhani',sans-serif;font-size:24px;color:#ff3333;">WebGL Not Supported</h2>
+    <p style="font-size:14px;color:rgba(255,255,255,0.6);max-width:400px;">Your browser or device doesn't support WebGL,
+      which is required to run this game. Please try a modern browser or a different device.</p>
+  </div>
+
+  <div id="ui">
+    <!-- ══════════ VISUAL OVERLAYS ══════════ -->
+    <div id="flash-overlay"></div>
+    <div id="vignette-overlay"></div>
+    <div id="speed-lines"></div>
+
+    <!-- ══════════ AUDIO CONTROL ══════════ -->
+    <div id="audio-controls"
+      style="position:absolute;bottom:16px;right:16px;z-index:20;display:flex;gap:8px;pointer-events:none;">
+      <button id="mute-btn"
+        style="pointer-events:auto;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;"
+        title="Toggle Sound">🔊</button>
+    </div>
+
+    <!-- ══════════ ONBOARDING TUTORIAL ══════════ -->
+    <div id="tutorial-overlay"
+      style="display:none;position:absolute;inset:0;z-index:30;pointer-events:none;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
+      <div id="tutorial-step-1" class="tutorial-step"
+        style="position:absolute;bottom:15%;left:50%;transform:translateX(-50%);text-align:center;color:white;font-family:'Inter',sans-serif;pointer-events:none;">
+        <div style="font-size:48px;margin-bottom:8px;">👆</div>
+        <div style="font-size:16px;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,0.9);max-width:280px;">Swipe left &
+          right to move your crowd</div>
+      </div>
+      <div id="tutorial-step-2" class="tutorial-step"
+        style="display:none;position:absolute;bottom:15%;left:50%;transform:translateX(-50%);text-align:center;color:white;font-family:'Inter',sans-serif;pointer-events:none;">
+        <div style="font-size:48px;margin-bottom:8px;">🟢🔴</div>
+        <div style="font-size:16px;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,0.9);max-width:280px;">Green gates
+          ADD troops. Red gates REMOVE troops. Choose wisely!</div>
+      </div>
+      <div id="tutorial-step-3" class="tutorial-step"
+        style="display:none;position:absolute;bottom:15%;left:50%;transform:translateX(-50%);text-align:center;color:white;font-family:'Inter',sans-serif;pointer-events:none;">
+        <div style="font-size:48px;margin-bottom:8px;">💰</div>
+        <div style="font-size:16px;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,0.9);max-width:280px;">Collect coins
+          to upgrade in the shop!</div>
+      </div>
+    </div>
+
+    <!-- ══════════ IN-GAME HUD ══════════ -->
+    <div id="score-display" style="display:none;">
+      <div id="hud-top">
+        <div class="hud-pill" id="hud-level">Level <span id="current-level-display">1</span></div>
+        <div class="hud-pill" id="hud-troops">⚔ <span id="troop-count">1</span></div>
+        <div class="hud-pill" id="hud-coins">🪙 <span id="run-coins">0</span></div>
+      </div>
+      <div id="powerup-badges" style="display: flex; gap: 8px; margin-top: 4px; pointer-events: none;">
+        <div id="badge-speed"
+          style="display:none; background: linear-gradient(135deg, #00ffff, #0088ff); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+          ⚡ SPEED</div>
+        <div id="badge-shield"
+          style="display:none; background: linear-gradient(135deg, #ffaa00, #ff5500); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+          🛡 SHIELD</div>
+        <div id="badge-magnet"
+          style="display:none; background: linear-gradient(135deg, #ff00ff, #aa00aa); color: white; font-weight: 700; padding: 4px 12px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+          ✨ MAGNET</div>
+      </div>
+      <div id="progress-bar-wrap">
+        <div id="progress-bar-fill"></div>
+        <span id="progress-label">0%</span>
+      </div>
+      <button id="pause-btn" title="Pause (P)">⏸</button>
+    </div>
+
+    <!-- ══════════ MAIN MENU ══════════ -->
+    <div id="start-screen" class="screen">
+      <div class="screen-inner">
+        <div class="game-logo">
+          <div class="logo-icon">⚔</div>
+          <h1>Crowd Brawler <span class="logo-3d">3D</span></h1>
+          <p class="tagline">Build your army. Crush your enemies.</p>
+        </div>
+
+        <div class="meta-row">
+          <div class="meta-coin-badge">🪙 <span id="coin-count">0</span> coins</div>
+          <div class="meta-level-badge">Level <span id="start-level-display">1</span></div>
+        </div>
+
+        <button id="start-btn" class="btn-primary">
+          ▶ &nbsp;Play Level <span id="start-level-display2">1</span>
+        </button>
+
+        <div id="shop" class="shop-panel" style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="shop-title">🏪 Upgrade Shop</div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">👥 Start Troop</span>
+              <span class="shop-level">Lv <span id="upg-troops-lvl">1</span></span>
+            </div>
+            <button id="buy-troops-btn" class="btn-shop">
+              🪙 <span id="upg-troops-cost">10</span>
+            </button>
           </div>
 
-          <div class="meta-row">
-            <div class="meta-coin-badge">🪙 <span id="coin-count">0</span> coins</div>
-            <div class="meta-level-badge">Level <span id="start-level-display">1</span></div>
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">⚔ Attack Power</span>
+              <span class="shop-level">Lv <span id="upg-attack-lvl">1</span></span>
+            </div>
+            <button id="buy-attack-btn" class="btn-shop">
+              🪙 <span id="upg-attack-cost">15</span>
+            </button>
           </div>
 
-          <button id="start-btn" class="btn-primary">
-            ▶ &nbsp;Play Level <span id="start-level-display2">1</span>
-          </button>
-
-          <div id="shop" class="shop-panel" style="display: flex; flex-direction: column; gap: 10px;">
-            <div class="shop-title">🏪 Upgrade Shop</div>
-            
-            <div class="shop-row">
-              <div class="shop-info">
-                <span class="shop-name">👥 Start Troop</span>
-                <span class="shop-level">Lv <span id="upg-troops-lvl">1</span></span>
-              </div>
-              <button id="buy-troops-btn" class="btn-shop">
-                🪙 <span id="upg-troops-cost">10</span>
-              </button>
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🧲 Coin Magnet</span>
+              <span class="shop-level">Lv <span id="upg-magnet-lvl">1</span></span>
             </div>
-            
-            <div class="shop-row">
-              <div class="shop-info">
-                <span class="shop-name">⚔ Attack Power</span>
-                <span class="shop-level">Lv <span id="upg-attack-lvl">1</span></span>
-              </div>
-              <button id="buy-attack-btn" class="btn-shop">
-                🪙 <span id="upg-attack-cost">15</span>
-              </button>
-            </div>
-            
-            <div class="shop-row">
-              <div class="shop-info">
-                <span class="shop-name">🧲 Coin Magnet</span>
-                <span class="shop-level">Lv <span id="upg-magnet-lvl">1</span></span>
-              </div>
-              <button id="buy-magnet-btn" class="btn-shop">
-                🪙 <span id="upg-magnet-cost">15</span>
-              </button>
-            </div>
+            <button id="buy-magnet-btn" class="btn-shop">
+              🪙 <span id="upg-magnet-cost">15</span>
+            </button>
           </div>
         </div>
-      </div>
 
-      <!-- ══════════ LEVEL INTRO ══════════ -->
-      <div id="level-intro-screen" class="screen" style="display:none;">
-        <div class="intro-content">
-          <div class="intro-biome-badge" id="intro-biome-badge">UTOPIA</div>
-          <div class="intro-level-text">LEVEL <span id="intro-level-num">1</span></div>
-          <div class="intro-biome-name" id="intro-biome-name">☀ Utopia Day</div>
-          <div class="intro-desc" id="intro-desc">Build your army through the golden city gates.</div>
-          <div class="intro-countdown" id="intro-countdown">3</div>
+        <!-- Privacy Policy Link -->
+        <div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.3);">
+          By playing you agree to our
+          <a href="#" id="privacy-link" style="color:rgba(0,229,255,0.5);text-decoration:underline;"
+            onclick="event.preventDefault();document.getElementById('privacy-overlay').style.display='flex';">Privacy
+            Policy</a>
         </div>
       </div>
+    </div>
 
-      <!-- ══════════ PAUSE SCREEN ══════════ -->
-      <div id="pause-screen" class="screen" style="display:none;">
-        <div class="screen-inner pause-inner">
-          <div class="pause-icon">⏸</div>
-          <h2>Paused</h2>
-          <button id="resume-btn" class="btn-primary">▶ Resume</button>
-          <button id="restart-btn-pause" class="btn-secondary">↺ Restart Level</button>
-          <button id="menu-btn-pause" class="btn-ghost">⌂ Main Menu</button>
+    <!-- ══════════ PRIVACY POLICY OVERLAY ══════════ -->
+    <div id="privacy-overlay" class="screen" style="display:none;z-index:60;">
+      <div class="screen-inner" style="max-width:500px;max-height:80vh;overflow-y:auto;text-align:left;">
+        <h2 style="font-family:'Rajdhani',sans-serif;font-size:24px;color:#00e5ff;margin:0 0 12px;">Privacy Policy</h2>
+        <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6;">
+          <p><strong>Crowd Brawler 3D</strong> ("we", "our", "the app") respects your privacy.</p>
+          <p><strong>Data Collection:</strong> This app does not collect, store, or share any personal data. All game
+            progress (coins, upgrades, levels) is stored locally on your device using localStorage.</p>
+          <p><strong>Internet Permission:</strong> Internet access is used solely for loading web fonts from Google
+            Fonts CDN. No data is transmitted to our servers.</p>
+          <p><strong>Third-Party Services:</strong> This app does not integrate any third-party analytics, advertising
+            SDKs, or tracking services.</p>
+          <p><strong>Children's Privacy:</strong> The app is suitable for all ages and does not knowingly collect any
+            data from children.</p>
+          <p><strong>Changes:</strong> This policy may be updated. Continued use constitutes acceptance of any changes.
+          </p>
+          <p><strong>Contact:</strong> If you have questions, please contact us at the repository:
+            github.com/notesmedicose/Crowd-Runner</p>
         </div>
+        <button class="btn-primary" onclick="document.getElementById('privacy-overlay').style.display='none'"
+          style="margin-top:12px;font-size:14px;padding:10px 24px;">Close</button>
       </div>
+    </div>
 
-      <!-- ══════════ GAME OVER ══════════ -->
-      <div id="game-over-screen" class="screen" style="display:none;">
-        <div class="screen-inner">
-          <div class="result-icon defeat-icon">💀</div>
-          <h1 class="defeat-title">Defeated!</h1>
-          <p class="result-sub">Your army was wiped out on Level <span id="defeat-level">1</span></p>
-          <div class="result-stats">
-            <div class="stat-box">
-              <span class="stat-val" id="run-coins-gameover">0</span>
-              <span class="stat-lbl">🪙 Coins</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val" id="defeat-troops-lost">0</span>
-              <span class="stat-lbl">⚔ Troops Lost</span>
-            </div>
+    <!-- ══════════ LEVEL INTRO ══════════ -->
+    <div id="level-intro-screen" class="screen" style="display:none;">
+      <div class="intro-content">
+        <div class="intro-biome-badge" id="intro-biome-badge">UTOPIA</div>
+        <div class="intro-level-text">LEVEL <span id="intro-level-num">1</span></div>
+        <div class="intro-biome-name" id="intro-biome-name">☀ Utopia Day</div>
+        <div class="intro-desc" id="intro-desc">Build your army through the golden city gates.</div>
+        <div class="intro-countdown" id="intro-countdown">3</div>
+      </div>
+    </div>
+
+    <!-- ══════════ PAUSE SCREEN ══════════ -->
+    <div id="pause-screen" class="screen" style="display:none;">
+      <div class="screen-inner pause-inner">
+        <div class="pause-icon">⏸</div>
+        <h2>Paused</h2>
+        <button id="resume-btn" class="btn-primary">▶ Resume</button>
+        <button id="restart-btn-pause" class="btn-secondary">↺ Restart Level</button>
+        <button id="menu-btn-pause" class="btn-ghost">⌂ Main Menu</button>
+      </div>
+    </div>
+
+    <!-- ══════════ GAME OVER ══════════ -->
+    <div id="game-over-screen" class="screen" style="display:none;">
+      <div class="screen-inner">
+        <div class="result-icon defeat-icon">💀</div>
+        <h1 class="defeat-title">Defeated!</h1>
+        <p class="result-sub">Your army was wiped out on Level <span id="defeat-level">1</span></p>
+        <div class="result-stats">
+          <div class="stat-box">
+            <span class="stat-val" id="run-coins-gameover">0</span>
+            <span class="stat-lbl">🪙 Coins</span>
           </div>
-          <button id="retry-btn" class="btn-primary">↺ Try Again</button>
-          <button id="menu-btn-gameover" class="btn-ghost">⌂ Main Menu</button>
-        </div>
-      </div>
-
-      <!-- ══════════ LEVEL COMPLETE ══════════ -->
-      <div id="level-complete-screen" class="screen" style="display:none;">
-        <div class="screen-inner">
-          <div class="result-icon victory-icon">🏆</div>
-          <h1 class="victory-title">Level Complete!</h1>
-          <div class="star-rating" id="star-rating">⭐⭐⭐</div>
-          <div class="result-stats">
-            <div class="stat-box">
-              <span class="stat-val" id="surviving-troops">0</span>
-              <span class="stat-lbl">⚔ Survivors</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val" id="bonus-coins">0</span>
-              <span class="stat-lbl">🪙 Bonus</span>
-            </div>
+          <div class="stat-box">
+            <span class="stat-val" id="defeat-troops-lost">0</span>
+            <span class="stat-lbl">⚔ Troops Lost</span>
           </div>
-          <div class="next-biome-preview" id="next-biome-preview">
-            Next: <span id="next-biome-name">Wasteland Night</span>
-          </div>
-          <button id="next-level-btn" class="btn-primary btn-next">Next Level ▶</button>
         </div>
+        <button id="retry-btn" class="btn-primary">↺ Try Again</button>
+        <button id="menu-btn-gameover" class="btn-ghost">⌂ Main Menu</button>
       </div>
+    </div>
 
-    </div><!-- /ui -->
+    <!-- ══════════ LEVEL COMPLETE ══════════ -->
+    <div id="level-complete-screen" class="screen" style="display:none;">
+      <div class="screen-inner">
+        <div class="result-icon victory-icon">🏆</div>
+        <h1 class="victory-title">Level Complete!</h1>
+        <div class="star-rating" id="star-rating">⭐⭐⭐</div>
+        <div class="result-stats">
+          <div class="stat-box">
+            <span class="stat-val" id="surviving-troops">0</span>
+            <span class="stat-lbl">⚔ Survivors</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-val" id="bonus-coins">0</span>
+            <span class="stat-lbl">🪙 Bonus</span>
+          </div>
+        </div>
+        <div class="next-biome-preview" id="next-biome-preview">
+          Next: <span id="next-biome-name">Wasteland Night</span>
+        </div>
+        <button id="next-level-btn" class="btn-primary btn-next">Next Level ▶</button>
+      </div>
+    </div>
 
-    <canvas id="gameCanvas"></canvas>
-    <script type="module" src="./main.js"></script>
-  </body>
+  </div><!-- /ui -->
+
+  <canvas id="gameCanvas"></canvas>
+  <script type="module" src="./main.js"></script>
+</body>
+
 </html>

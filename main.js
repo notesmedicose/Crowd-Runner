@@ -3,60 +3,114 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
+// --- Loading Screen ---
+const loadingScreen = document.getElementById('loading-screen');
+const loadingBarFill = document.getElementById('loading-bar-fill');
+const loadingTextEl = document.getElementById('loading-text');
+const webglErrorEl = document.getElementById('webgl-error');
+
+function updateLoading(pct, text) {
+    if (loadingBarFill) loadingBarFill.style.width = pct + '%';
+    if (loadingTextEl) loadingTextEl.textContent = text || 'Loading...';
+}
+
+// --- Audio Mute State ---
+let isMuted = false;
+try {
+    isMuted = localStorage.getItem('crowdRunnerMuted') === 'true';
+} catch (e) { }
+const muteBtn = document.getElementById('mute-btn');
+if (muteBtn) {
+    muteBtn.textContent = isMuted ? '🔇' : '🔊';
+    muteBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        muteBtn.textContent = isMuted ? '🔇' : '🔊';
+        try { localStorage.setItem('crowdRunnerMuted', isMuted ? 'true' : 'false'); } catch (e) { }
+    });
+}
+
+// --- Tutorial State ---
+const TUTORIAL_KEY = 'crowdRunnerTutorialDone';
+let tutorialDone = false;
+try { tutorialDone = localStorage.getItem(TUTORIAL_KEY) === 'true'; } catch (e) { }
+const tutorialOverlay = document.getElementById('tutorial-overlay');
+
+function showTutorial() {
+    if (tutorialDone || !tutorialOverlay) return;
+    tutorialOverlay.style.display = 'block';
+    let step = 1;
+    const totalSteps = 3;
+    const advanceTutorial = () => {
+        document.getElementById('tutorial-step-' + step).style.display = 'none';
+        step++;
+        if (step <= totalSteps) {
+            document.getElementById('tutorial-step-' + step).style.display = 'block';
+        } else {
+            tutorialOverlay.style.display = 'none';
+            tutorialDone = true;
+            try { localStorage.setItem(TUTORIAL_KEY, 'true'); } catch (e) { }
+        }
+    };
+    // Advance tutorial on first tap/click
+    const advancer = () => { advanceTutorial(); };
+    tutorialOverlay.addEventListener('click', advancer);
+    tutorialOverlay.addEventListener('touchstart', advancer);
+}
+
 // --- DOM Elements ---
-const canvas             = document.getElementById('gameCanvas');
-const startScreen        = document.getElementById('start-screen');
-const gameOverScreen     = document.getElementById('game-over-screen');
-const levelCompleteScreen= document.getElementById('level-complete-screen');
-const levelIntroScreen   = document.getElementById('level-intro-screen');
-const pauseScreen        = document.getElementById('pause-screen');
-const scoreDisplay       = document.getElementById('score-display');
-const troopCountEl       = document.getElementById('troop-count');
-const coinCountEl        = document.getElementById('coin-count');
-const runCoinsEl         = document.getElementById('run-coins');
+const canvas = document.getElementById('gameCanvas');
+const startScreen = document.getElementById('start-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const levelCompleteScreen = document.getElementById('level-complete-screen');
+const levelIntroScreen = document.getElementById('level-intro-screen');
+const pauseScreen = document.getElementById('pause-screen');
+const scoreDisplay = document.getElementById('score-display');
+const troopCountEl = document.getElementById('troop-count');
+const coinCountEl = document.getElementById('coin-count');
+const runCoinsEl = document.getElementById('run-coins');
 const runCoinsGameOverEl = document.getElementById('run-coins-gameover');
 
-const currentLevelEl     = document.getElementById('current-level-display');
-const startLevelEl       = document.getElementById('start-level-display');
-const startLevelEl2      = document.getElementById('start-level-display2');
-const survivingTroopsEl  = document.getElementById('surviving-troops');
-const bonusCoinsEl       = document.getElementById('bonus-coins');
-const starRatingEl       = document.getElementById('star-rating');
-const defeatLevelEl      = document.getElementById('defeat-level');
-const nextBiomeNameEl    = document.getElementById('next-biome-name');
+const currentLevelEl = document.getElementById('current-level-display');
+const startLevelEl = document.getElementById('start-level-display');
+const startLevelEl2 = document.getElementById('start-level-display2');
+const survivingTroopsEl = document.getElementById('surviving-troops');
+const bonusCoinsEl = document.getElementById('bonus-coins');
+const starRatingEl = document.getElementById('star-rating');
+const defeatLevelEl = document.getElementById('defeat-level');
+const nextBiomeNameEl = document.getElementById('next-biome-name');
 
-const introBiomeBadge    = document.getElementById('intro-biome-badge');
-const introBiomeName     = document.getElementById('intro-biome-name');
-const introLevelNum      = document.getElementById('intro-level-num');
-const introDesc          = document.getElementById('intro-desc');
-const introCountdown     = document.getElementById('intro-countdown');
+const introBiomeBadge = document.getElementById('intro-biome-badge');
+const introBiomeName = document.getElementById('intro-biome-name');
+const introLevelNum = document.getElementById('intro-level-num');
+const introDesc = document.getElementById('intro-desc');
+const introCountdown = document.getElementById('intro-countdown');
 
-const progressBarFill    = document.getElementById('progress-bar-fill');
-const progressLabel      = document.getElementById('progress-label');
+const progressBarFill = document.getElementById('progress-bar-fill');
+const progressLabel = document.getElementById('progress-label');
 
 // --- Visual Effect Overlay Elements ---
-const flashOverlay       = document.getElementById('flash-overlay');
-const vignetteOverlay    = document.getElementById('vignette-overlay');
-const speedLinesEl       = document.getElementById('speed-lines');
-const hudTroopsEl        = document.getElementById('hud-troops');
-const hudCoinsEl         = document.getElementById('hud-coins');
+const flashOverlay = document.getElementById('flash-overlay');
+const vignetteOverlay = document.getElementById('vignette-overlay');
+const speedLinesEl = document.getElementById('speed-lines');
+const hudTroopsEl = document.getElementById('hud-troops');
+const hudCoinsEl = document.getElementById('hud-coins');
 
-const upgTroopsLvl  = document.getElementById('upg-troops-lvl');
+const upgTroopsLvl = document.getElementById('upg-troops-lvl');
 const upgTroopsCost = document.getElementById('upg-troops-cost');
-const buyTroopsBtn  = document.getElementById('buy-troops-btn');
+const buyTroopsBtn = document.getElementById('buy-troops-btn');
 
-const upgAttackLvl  = document.getElementById('upg-attack-lvl');
+const upgAttackLvl = document.getElementById('upg-attack-lvl');
 const upgAttackCost = document.getElementById('upg-attack-cost');
-const buyAttackBtn  = document.getElementById('buy-attack-btn');
+const buyAttackBtn = document.getElementById('buy-attack-btn');
 
-const upgMagnetLvl  = document.getElementById('upg-magnet-lvl');
+const upgMagnetLvl = document.getElementById('upg-magnet-lvl');
 const upgMagnetCost = document.getElementById('upg-magnet-cost');
-const buyMagnetBtn  = document.getElementById('buy-magnet-btn');
+const buyMagnetBtn = document.getElementById('buy-magnet-btn');
 
 // --- Procedural Audio Engine ---
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const SoundEngine = {
-    playTone(freq, type, duration, vol=0.1) {
+    playTone(freq, type, duration, vol = 0.1) {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -70,24 +124,24 @@ const SoundEngine = {
     hit() { this.playTone(100, 'sawtooth', 0.1, 0.05); },
     bossHit() { this.playTone(50, 'sawtooth', 0.2, 0.1); },
     coin() { this.playTone(1200, 'sine', 0.3, 0.05); },
-    gateGood() { this.playTone(600, 'sine', 0.4, 0.1); setTimeout(()=>this.playTone(800, 'sine', 0.4, 0.1), 100); },
+    gateGood() { this.playTone(600, 'sine', 0.4, 0.1); setTimeout(() => this.playTone(800, 'sine', 0.4, 0.1), 100); },
     gateBad() { this.playTone(150, 'sawtooth', 0.3, 0.1); },
-    victory() { this.playTone(400, 'sine', 0.2, 0.1); setTimeout(()=>this.playTone(500, 'sine', 0.2, 0.1), 200); setTimeout(()=>this.playTone(600, 'sine', 0.4, 0.1), 400); }
+    victory() { this.playTone(400, 'sine', 0.2, 0.1); setTimeout(() => this.playTone(500, 'sine', 0.2, 0.1), 200); setTimeout(() => this.playTone(600, 'sine', 0.4, 0.1), 400); }
 };
 
 // --- Game Tuning Constants ---
-const SCROLL_SPEED_BASE    = 40;    // World units per second (base run speed)
-const SCROLL_SPEED_FIGHT   = 0.2;   // Multiplier applied when troops are fighting
-const MAX_CROWD            = 1000;  // Hard cap on total player troops
-const BOSS_SPAWN_CHANCE    = 0.8;   // Random threshold above which a boss spawns (level > 1)
+const SCROLL_SPEED_BASE = 40;    // World units per second (base run speed)
+const SCROLL_SPEED_FIGHT = 0.2;   // Multiplier applied when troops are fighting
+const MAX_CROWD = 1000;  // Hard cap on total player troops
+const BOSS_SPAWN_CHANCE = 0.8;   // Random threshold above which a boss spawns (level > 1)
 const TROOP_FIGHT_INTERVAL = 0.5;   // Seconds between each troop attack
-const TROOP_DEATH_CHANCE   = 0.2;   // Probability a troop dies per attack
-const LEVEL_BASE_LENGTH    = 500;   // Base distance units per level
-const LEVEL_LENGTH_SCALE   = 100;   // Extra distance added per level number
+const TROOP_DEATH_CHANCE = 0.2;   // Probability a troop dies per attack
+const LEVEL_BASE_LENGTH = 500;   // Base distance units per level
+const LEVEL_LENGTH_SCALE = 100;   // Extra distance added per level number
 const SEPARATION_NEIGHBORS = 60;    // Max neighbors checked in separation (caps O(n²) to O(n·60))
 const SEPARATION_SKIP_RAND = 0.3;   // Per-frame probability to skip sep. for a troop (perf relief)
-const GATE_SPAWN_INTERVAL  = 80;    // Distance units between obstacle spawns
-const BONUS_COINS_RATIO    = 0.5;   // Surviving-troop multiplier for end-of-level bonus coins
+const GATE_SPAWN_INTERVAL = 80;    // Distance units between obstacle spawns
+const BONUS_COINS_RATIO = 0.5;   // Surviving-troop multiplier for end-of-level bonus coins
 
 // --- Meta-Game State ---
 const SAVE_KEY = 'crowdRunnerSave2';
@@ -97,11 +151,11 @@ let saveState = { ...DEFAULT_SAVE };
 function validateSave(data) {
     // Guard against corrupted or manually-edited localStorage
     if (typeof data !== 'object' || data === null) return false;
-    if (typeof data.coins !== 'number'        || data.coins < 0)          return false;
+    if (typeof data.coins !== 'number' || data.coins < 0) return false;
     if (typeof data.upgradeTroops !== 'number' || data.upgradeTroops < 1) return false;
     if (typeof data.upgradeAttack !== 'number' || data.upgradeAttack < 1) return false;
     if (typeof data.upgradeMagnet !== 'number' || data.upgradeMagnet < 1) return false;
-    if (typeof data.level !== 'number'         || data.level < 1)         return false;
+    if (typeof data.level !== 'number' || data.level < 1) return false;
     return true;
 }
 
@@ -125,7 +179,7 @@ function loadSave() {
 }
 function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(saveState)); updateShopUI(); }
 
-function getUpgradeCost(level, type) { 
+function getUpgradeCost(level, type) {
     if (type === 'attack') return level * 15;
     if (type === 'magnet') return level * 12;
     return level * 10; // default for troops
@@ -133,26 +187,26 @@ function getUpgradeCost(level, type) {
 
 function updateShopUI() {
     coinCountEl.innerText = saveState.coins;
-    
+
     let tCost = getUpgradeCost(saveState.upgradeTroops, 'troops');
     upgTroopsLvl.innerText = saveState.upgradeTroops; upgTroopsCost.innerText = tCost;
     buyTroopsBtn.disabled = saveState.coins < tCost;
-    
+
     let aCost = getUpgradeCost(saveState.upgradeAttack, 'attack');
     if (upgAttackLvl) {
         upgAttackLvl.innerText = saveState.upgradeAttack;
         upgAttackCost.innerText = aCost;
         buyAttackBtn.disabled = saveState.coins < aCost;
     }
-    
+
     let mCost = getUpgradeCost(saveState.upgradeMagnet, 'magnet');
     if (upgMagnetLvl) {
         upgMagnetLvl.innerText = saveState.upgradeMagnet;
         upgMagnetCost.innerText = mCost;
         buyMagnetBtn.disabled = saveState.coins < mCost;
     }
-    
-    startLevelEl.innerText  = saveState.level;
+
+    startLevelEl.innerText = saveState.level;
     if (startLevelEl2) startLevelEl2.innerText = saveState.level;
     currentLevelEl.innerText = saveState.level;
 }
@@ -168,7 +222,7 @@ camera.position.copy(baseCameraPos); camera.lookAt(0, 3, -80);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; 
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 
 const composer = new EffectComposer(renderer);
@@ -203,25 +257,25 @@ function createBuildingTexture(type) {
     if (type === 'utopia') {
         ctx.fillStyle = '#1e2230'; ctx.fillRect(0, 0, 128, 256);
         ctx.fillStyle = '#ffdf6d'; // yellow windows
-        for(let y=16; y<240; y+=20) {
-            for(let x=12; x<116; x+=16) {
-                if(Math.random() > 0.4) ctx.fillRect(x, y, 6, 10);
+        for (let y = 16; y < 240; y += 20) {
+            for (let x = 12; x < 116; x += 16) {
+                if (Math.random() > 0.4) ctx.fillRect(x, y, 6, 10);
             }
         }
     } else if (type === 'wasteland') {
         ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, 128, 256);
         ctx.fillStyle = '#ff3300'; // burning red windows
-        for(let y=16; y<240; y+=20) {
-            for(let x=12; x<116; x+=16) {
-                if(Math.random() > 0.8) ctx.fillRect(x, y, 6, 10);
+        for (let y = 16; y < 240; y += 20) {
+            for (let x = 12; x < 116; x += 16) {
+                if (Math.random() > 0.8) ctx.fillRect(x, y, 6, 10);
             }
         }
     } else if (type === 'neon') {
         ctx.fillStyle = '#0a0a16'; ctx.fillRect(0, 0, 128, 256);
         // Cyberpunk neon stripes and window blocks
-        for(let y=16; y<240; y+=20) {
-            for(let x=12; x<116; x+=16) {
-                if(Math.random() > 0.3) {
+        for (let y = 16; y < 240; y += 20) {
+            for (let x = 12; x < 116; x += 16) {
+                if (Math.random() > 0.3) {
                     ctx.fillStyle = Math.random() > 0.5 ? '#00f0ff' : '#ff007f'; // Cyan or Magenta
                     ctx.fillRect(x, y, 6, 10);
                 }
@@ -236,25 +290,25 @@ function createBuildingTexture(type) {
         // Frosty brick look
         ctx.fillStyle = '#2d3b4d'; ctx.fillRect(0, 0, 128, 256);
         ctx.fillStyle = '#ffffff'; // Snow layers on window frames
-        for(let y=20; y<240; y+=30) {
+        for (let y = 20; y < 240; y += 30) {
             ctx.fillRect(8, y, 112, 3);
-            for(let x=16; x<116; x+=24) {
+            for (let x = 16; x < 116; x += 24) {
                 ctx.fillStyle = '#aaddff'; // Icy windows
-                ctx.fillRect(x, y-12, 10, 12);
+                ctx.fillRect(x, y - 12, 10, 12);
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(x-2, y-14, 14, 2); // snow ledge
+                ctx.fillRect(x - 2, y - 14, 14, 2); // snow ledge
             }
         }
     } else if (type === 'lava') {
         // Obsidian crackle lava texture
         ctx.fillStyle = '#1c1512'; ctx.fillRect(0, 0, 128, 256);
         ctx.fillStyle = '#ff4500'; // Molten orange lines
-        for(let i=0; i<40; i++) {
+        for (let i = 0; i < 40; i++) {
             ctx.beginPath();
-            ctx.moveTo(Math.random()*128, Math.random()*256);
-            ctx.lineTo(Math.random()*128, Math.random()*256);
+            ctx.moveTo(Math.random() * 128, Math.random() * 256);
+            ctx.lineTo(Math.random() * 128, Math.random() * 256);
             ctx.strokeStyle = Math.random() > 0.4 ? '#ff4500' : '#ffaa00';
-            ctx.lineWidth = Math.random()*3 + 1;
+            ctx.lineWidth = Math.random() * 3 + 1;
             ctx.stroke();
         }
     }
@@ -267,7 +321,7 @@ function createRoadTexture() {
     ctx.fillStyle = '#1e1e1e'; ctx.fillRect(0, 0, 128, 512);
     ctx.fillStyle = '#666666'; ctx.fillRect(4, 0, 3, 512); ctx.fillRect(121, 0, 3, 512); // curbs
     ctx.fillStyle = '#ffd700'; // dashed yellow line
-    for(let y=0; y<512; y+=64) { ctx.fillRect(62, y+16, 4, 32); }
+    for (let y = 0; y < 512; y += 64) { ctx.fillRect(62, y + 16, 4, 32); }
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1, 10);
@@ -289,7 +343,7 @@ function createFlareTexture() {
 let currentBiome = 'utopia';
 let timeOfDay = 'day';
 
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8); 
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
 hemiLight.position.set(0, 50, 0); scene.add(hemiLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(40, 80, -100); dirLight.castShadow = true;
@@ -321,10 +375,10 @@ celestialBody.add(flareSprite);
 const starsGeo = new THREE.BufferGeometry();
 const starsCount = 2000;
 const starsPos = new Float32Array(starsCount * 3);
-for(let i=0; i<starsCount*3; i+=3) {
-    starsPos[i] = (Math.random()-0.5)*800;
-    starsPos[i+1] = Math.random()*300 + 50;
-    starsPos[i+2] = (Math.random()-0.5)*800;
+for (let i = 0; i < starsCount * 3; i += 3) {
+    starsPos[i] = (Math.random() - 0.5) * 800;
+    starsPos[i + 1] = Math.random() * 300 + 50;
+    starsPos[i + 2] = (Math.random() - 0.5) * 800;
 }
 starsGeo.setAttribute('position', new THREE.BufferAttribute(starsPos, 3));
 
@@ -340,7 +394,7 @@ const starPalette = [
 for (let i = 0; i < starsCount; i++) {
     const c = starPalette[Math.floor(Math.random() * starPalette.length)];
     const bright = 0.6 + Math.random() * 0.4;
-    starColors[i * 3]     = c[0] * bright;
+    starColors[i * 3] = c[0] * bright;
     starColors[i * 3 + 1] = c[1] * bright;
     starColors[i * 3 + 2] = c[2] * bright;
 }
@@ -388,8 +442,8 @@ const road = new THREE.Mesh(roadGeo, roadMat); road.rotation.x = -Math.PI / 2; r
 
 const grassGeo = new THREE.PlaneGeometry(800, 1000);
 const grassMat = new THREE.MeshStandardMaterial({ color: 0x2d8a3b, roughness: 1.0, metalness: 0.0 });
-const grassL = new THREE.Mesh(grassGeo, grassMat); grassL.rotation.x = -Math.PI/2; grassL.position.x = -420; grassL.position.y = -0.1; grassL.receiveShadow = true; scene.add(grassL);
-const grassR = new THREE.Mesh(grassGeo, grassMat); grassR.rotation.x = -Math.PI/2; grassR.position.x = 420; grassR.position.y = -0.1; grassR.receiveShadow = true; scene.add(grassR);
+const grassL = new THREE.Mesh(grassGeo, grassMat); grassL.rotation.x = -Math.PI / 2; grassL.position.x = -420; grassL.position.y = -0.1; grassL.receiveShadow = true; scene.add(grassL);
+const grassR = new THREE.Mesh(grassGeo, grassMat); grassR.rotation.x = -Math.PI / 2; grassR.position.x = 420; grassR.position.y = -0.1; grassR.receiveShadow = true; scene.add(grassR);
 
 // --- Biome Materials Cache ---
 const bldgTexUtopia = createBuildingTexture('utopia');
@@ -398,11 +452,11 @@ const bldgTexNeon = createBuildingTexture('neon');
 const bldgTexTundra = createBuildingTexture('tundra');
 const bldgTexLava = createBuildingTexture('lava');
 
-const bldgMatUtopia    = new THREE.MeshStandardMaterial({ map: bldgTexUtopia,    emissiveMap: bldgTexUtopia,    emissive: 0xffffff, emissiveIntensity: 0.5,  roughness: 0.2, metalness: 0.8 });
+const bldgMatUtopia = new THREE.MeshStandardMaterial({ map: bldgTexUtopia, emissiveMap: bldgTexUtopia, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.8 });
 const bldgMatWasteland = new THREE.MeshStandardMaterial({ map: bldgTexWasteland, emissiveMap: bldgTexWasteland, emissive: 0xff2200, emissiveIntensity: 0.85, roughness: 0.8, metalness: 0.1 });
-const bldgMatNeon      = new THREE.MeshStandardMaterial({ map: bldgTexNeon,      emissiveMap: bldgTexNeon,      emissive: 0xffffff, emissiveIntensity: 0.9,  roughness: 0.1, metalness: 0.9 });
-const bldgMatTundra    = new THREE.MeshStandardMaterial({ map: bldgTexTundra, emissive: 0xaaddff, emissiveIntensity: 0.0, roughness: 0.7, metalness: 0.1 });
-const bldgMatLava      = new THREE.MeshStandardMaterial({ map: bldgTexLava,      emissiveMap: bldgTexLava,      emissive: 0xff3300, emissiveIntensity: 1.0,  roughness: 0.9, metalness: 0.0 });
+const bldgMatNeon = new THREE.MeshStandardMaterial({ map: bldgTexNeon, emissiveMap: bldgTexNeon, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.1, metalness: 0.9 });
+const bldgMatTundra = new THREE.MeshStandardMaterial({ map: bldgTexTundra, emissive: 0xaaddff, emissiveIntensity: 0.0, roughness: 0.7, metalness: 0.1 });
+const bldgMatLava = new THREE.MeshStandardMaterial({ map: bldgTexLava, emissiveMap: bldgTexLava, emissive: 0xff3300, emissiveIntensity: 1.0, roughness: 0.9, metalness: 0.0 });
 
 // --- Environment Pools ---
 const MAX_BUILDINGS = 300;
@@ -430,7 +484,7 @@ scene.add(mountMesh);
 let mountains = [];
 
 const MAX_TREES = 150;
-const treeConeGeo = new THREE.ConeGeometry(3, 8, 5); 
+const treeConeGeo = new THREE.ConeGeometry(3, 8, 5);
 const treeTrunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 3, 5);
 const treeConeMat = new THREE.MeshStandardMaterial({ color: 0x1e5c27, roughness: 0.9, emissive: new THREE.Color(0x000000), emissiveIntensity: 0.0 });
 const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4d2f1d, roughness: 0.9 });
@@ -547,11 +601,11 @@ for (let i = 0; i < MAX_PHYSICAL_LIGHTS; i++) {
     spot.shadow.camera.far = 40;
     spot.shadow.bias = -0.002;
     scene.add(spot);
-    
+
     const target = new THREE.Object3D();
     scene.add(target);
     spot.target = target;
-    
+
     streetLightPool.push({ light: spot, target: target });
 }
 
@@ -560,10 +614,10 @@ function applyBiomeSettings() {
     const biomeCycle = ['utopia', 'wasteland', 'neon', 'tundra', 'lava'];
     const timeCycle = ['day', 'night', 'night', 'day', 'night'];
     const index = (saveState.level - 1) % 5;
-    
+
     currentBiome = biomeCycle[index];
     timeOfDay = timeCycle[index];
-    
+
     if (timeOfDay === 'day') {
         if (currentBiome === 'utopia') {
             const skyTex = createSkyTexture('#a1d8f6', '#dceefc');
@@ -579,14 +633,14 @@ function applyBiomeSettings() {
             hemiLight.color.setHex(0xddecff); hemiLight.groundColor.setHex(0x9fc3d9); hemiLight.intensity = 1.1;
             dirLight.color.setHex(0xffffff); dirLight.intensity = 1.3;
         }
-        
+
         celestialMat.color.setHex(0xffffee); flareSprite.visible = true;
         starsMesh.visible = false; satsMesh.visible = false;
         moonGlowSprite.visible = false;
         // Reset night-only emissives for day
         roadMat.emissive.setHex(0x000000); roadMat.emissiveIntensity = 0.0;
         treeConeMat.emissive.setHex(0x000000); treeConeMat.emissiveIntensity = 0.0;
-        
+
         // Hide streetlights in day
         streetLights = [];
         if (typeof streetLightPool !== 'undefined') {
@@ -642,7 +696,7 @@ function applyBiomeSettings() {
         celestialMat.needsUpdate = true;
         roadMat.needsUpdate = true;
         treeConeMat.needsUpdate = true;
-        
+
         celestialMat.color.setHex(0xaaccff); flareSprite.visible = false;
         starsMesh.visible = true; satsMesh.visible = true;
     }
@@ -690,11 +744,11 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
     }
 
     // Satellites
-    if(timeOfDay === 'night') {
-        for(let i=0; i<5; i++) {
-            if(satellites.length <= i) satellites.push({x:(Math.random()-0.5)*400, y:Math.random()*80+120, z:-500, speed: Math.random()*60+40});
+    if (timeOfDay === 'night') {
+        for (let i = 0; i < 5; i++) {
+            if (satellites.length <= i) satellites.push({ x: (Math.random() - 0.5) * 400, y: Math.random() * 80 + 120, z: -500, speed: Math.random() * 60 + 40 });
             let s = satellites[i]; s.z += s.speed * dt;
-            if(s.z > 200) { s.z = -500; s.x = (Math.random()-0.5)*400; }
+            if (s.z > 200) { s.z = -500; s.x = (Math.random() - 0.5) * 400; }
             dummy.position.set(s.x, s.y, s.z); dummy.updateMatrix();
             satsMesh.setMatrixAt(i, dummy.matrix);
         }
@@ -702,32 +756,32 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
     }
 
     // Buildings
-    for(let i=0; i<MAX_BUILDINGS; i++) {
-        if(i < buildings.length) {
+    for (let i = 0; i < MAX_BUILDINGS; i++) {
+        if (i < buildings.length) {
             let b = buildings[i]; b.z += effectiveScrollSpeed * dt;
-            dummy.position.set(b.x, b.h/2, b.z); dummy.scale.set(b.w, b.h, b.d); dummy.rotation.set(b.rx, b.ry, b.rz); dummy.updateMatrix();
+            dummy.position.set(b.x, b.h / 2, b.z); dummy.scale.set(b.w, b.h, b.d); dummy.rotation.set(b.rx, b.ry, b.rz); dummy.updateMatrix();
             bldgMesh.setMatrixAt(i, dummy.matrix);
-        } else { dummy.scale.set(0,0,0); dummy.updateMatrix(); bldgMesh.setMatrixAt(i, dummy.matrix); }
+        } else { dummy.scale.set(0, 0, 0); dummy.updateMatrix(); bldgMesh.setMatrixAt(i, dummy.matrix); }
     }
     bldgMesh.instanceMatrix.needsUpdate = true;
 
     // Lakes
-    for(let i=0; i<MAX_LAKES; i++) {
-        if(i < lakes.length) {
+    for (let i = 0; i < MAX_LAKES; i++) {
+        if (i < lakes.length) {
             let l = lakes[i]; l.z += effectiveScrollSpeed * dt;
-            dummy.position.set(l.x, 0.05, l.z); dummy.scale.set(l.w, l.d, 1); dummy.rotation.set(-Math.PI/2, 0, 0); dummy.updateMatrix();
+            dummy.position.set(l.x, 0.05, l.z); dummy.scale.set(l.w, l.d, 1); dummy.rotation.set(-Math.PI / 2, 0, 0); dummy.updateMatrix();
             lakesMesh.setMatrixAt(i, dummy.matrix);
-        } else { dummy.scale.set(0,0,0); dummy.updateMatrix(); lakesMesh.setMatrixAt(i, dummy.matrix); }
+        } else { dummy.scale.set(0, 0, 0); dummy.updateMatrix(); lakesMesh.setMatrixAt(i, dummy.matrix); }
     }
     lakesMesh.instanceMatrix.needsUpdate = true;
 
     // Mountains
-    for(let i=0; i<MAX_MOUNTAINS; i++) {
-        if(i < mountains.length) {
+    for (let i = 0; i < MAX_MOUNTAINS; i++) {
+        if (i < mountains.length) {
             let m = mountains[i]; m.z += effectiveScrollSpeed * 0.15 * dt; // slow parallax
-            dummy.position.set(m.x, m.h/2 - 5, m.z); dummy.scale.set(m.w, m.h, m.w); dummy.rotation.set(0, m.ry, 0); dummy.updateMatrix();
+            dummy.position.set(m.x, m.h / 2 - 5, m.z); dummy.scale.set(m.w, m.h, m.w); dummy.rotation.set(0, m.ry, 0); dummy.updateMatrix();
             mountMesh.setMatrixAt(i, dummy.matrix);
-        } else { dummy.scale.set(0,0,0); dummy.updateMatrix(); mountMesh.setMatrixAt(i, dummy.matrix); }
+        } else { dummy.scale.set(0, 0, 0); dummy.updateMatrix(); mountMesh.setMatrixAt(i, dummy.matrix); }
     }
     mountMesh.instanceMatrix.needsUpdate = true;
 
@@ -735,16 +789,16 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
     for (let i = 0; i < MAX_TREES; i++) {
         if (i < trees.length) {
             let t = trees[i]; t.z += effectiveScrollSpeed * dt;
-            
+
             // Trunk
-            dummy.position.set(t.x, 1.5, t.z); dummy.scale.set(1, 1, 1); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+            dummy.position.set(t.x, 1.5, t.z); dummy.scale.set(1, 1, 1); dummy.rotation.set(0, 0, 0); dummy.updateMatrix();
             treeTrunkMesh.setMatrixAt(i, dummy.matrix);
-            
+
             // Foliage
             dummy.position.set(t.x, 5.0, t.z); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
             treeConeMesh.setMatrixAt(i, dummy.matrix);
         } else {
-            dummy.scale.set(0,0,0); dummy.updateMatrix();
+            dummy.scale.set(0, 0, 0); dummy.updateMatrix();
             treeTrunkMesh.setMatrixAt(i, dummy.matrix); treeConeMesh.setMatrixAt(i, dummy.matrix);
         }
     }
@@ -754,21 +808,21 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
     for (let i = 0; i < MAX_STREETLIGHTS; i++) {
         if (i < streetLights.length && timeOfDay === 'night') {
             let s = streetLights[i]; s.z += effectiveScrollSpeed * dt;
-            
+
             // Pole
-            dummy.position.set(s.x, 4.0, s.z); dummy.scale.set(1, 1, 1); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+            dummy.position.set(s.x, 4.0, s.z); dummy.scale.set(1, 1, 1); dummy.rotation.set(0, 0, 0); dummy.updateMatrix();
             lightPoleMesh.setMatrixAt(i, dummy.matrix);
-            
+
             // Bulb
             let bulbX = s.x + (s.x > 0 ? -1.5 : 1.5);
             dummy.position.set(bulbX, 8.0, s.z); dummy.updateMatrix();
             bulbMesh.setMatrixAt(i, dummy.matrix);
-            
+
             // Beam
             dummy.position.set(bulbX, 3.0, s.z); dummy.rotation.set(0, 0, s.x > 0 ? -0.15 : 0.15); dummy.updateMatrix();
             beamMesh.setMatrixAt(i, dummy.matrix);
         } else {
-            dummy.scale.set(0,0,0); dummy.updateMatrix();
+            dummy.scale.set(0, 0, 0); dummy.updateMatrix();
             lightPoleMesh.setMatrixAt(i, dummy.matrix); bulbMesh.setMatrixAt(i, dummy.matrix); beamMesh.setMatrixAt(i, dummy.matrix);
         }
     }
@@ -779,13 +833,13 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
     if (timeOfDay === 'night') {
         const visibleLights = streetLights.filter(s => s.z > -120 && s.z < 25);
         visibleLights.sort((a, b) => Math.abs(a.z) - Math.abs(b.z));
-        
+
         const countToEnable = Math.min(visibleLights.length, MAX_PHYSICAL_LIGHTS);
         for (let i = 0; i < countToEnable; i++) {
             const s = visibleLights[i];
             const pLight = streetLightPool[i];
             let bulbX = s.x + (s.x > 0 ? -1.5 : 1.5);
-            
+
             pLight.light.position.set(bulbX, 8.0, s.z);
             pLight.target.position.set(bulbX, 0, s.z);
             pLight.light.intensity = 35.0; // high intensity for realistic glow on ground
@@ -793,7 +847,7 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
             activePhysicalCount++;
         }
     }
-    
+
     // Turn off unused spotlights in pool
     for (let i = activePhysicalCount; i < MAX_PHYSICAL_LIGHTS; i++) {
         streetLightPool[i].light.intensity = 0;
@@ -805,49 +859,49 @@ function spawnEnvironmentObjects() {
     const spawnZ = -450;
 
     // Cities / Ruins (Spawns far off road)
-    if(buildings.length < MAX_BUILDINGS && Math.random() < 0.25) {
+    if (buildings.length < MAX_BUILDINGS && Math.random() < 0.25) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 80 + 40);
-        let w = Math.random()*20 + 15;
-        let d = Math.random()*20 + 15;
-        let h = Math.random()*120 + 30;
+        let w = Math.random() * 20 + 15;
+        let d = Math.random() * 20 + 15;
+        let h = Math.random() * 120 + 30;
         let rx = 0; let ry = Math.random() * Math.PI; let rz = 0;
-        
+
         if (currentBiome === 'wasteland') {
-            h = Math.random()*70 + 15;
-            rx = (Math.random()-0.5) * 0.3; // Destroyed tilt
-            rz = (Math.random()-0.5) * 0.3;
+            h = Math.random() * 70 + 15;
+            rx = (Math.random() - 0.5) * 0.3; // Destroyed tilt
+            rz = (Math.random() - 0.5) * 0.3;
         }
-        buildings.push({ x, z: spawnZ - Math.random()*100, w, h, d, rx, ry, rz });
+        buildings.push({ x, z: spawnZ - Math.random() * 100, w, h, d, rx, ry, rz });
     }
 
     // Lakes / Dumps
-    if(lakes.length < MAX_LAKES && Math.random() < 0.04) {
+    if (lakes.length < MAX_LAKES && Math.random() < 0.04) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 50 + 45);
-        let w = Math.random()*50 + 25;
-        let d = Math.random()*50 + 25;
+        let w = Math.random() * 50 + 25;
+        let d = Math.random() * 50 + 25;
         lakes.push({ x, z: spawnZ, w, d });
     }
 
     // Mountains (Very far background)
-    if(mountains.length < MAX_MOUNTAINS && Math.random() < 0.08) {
+    if (mountains.length < MAX_MOUNTAINS && Math.random() < 0.08) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 150 + 250);
-        let w = Math.random()*120 + 80;
-        let h = Math.random()*160 + 80;
+        let w = Math.random() * 120 + 80;
+        let h = Math.random() * 160 + 80;
         mountains.push({ x, z: -800, w, h, ry: Math.random() * Math.PI });
     }
 
     // Trees (Forest along road borders)
-    if(trees.length < MAX_TREES && Math.random() < 0.3) {
+    if (trees.length < MAX_TREES && Math.random() < 0.3) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 15 + 23); // Just outside road edges (road is 40 wide)
         trees.push({ x: x, z: spawnZ });
     }
 
     // Street Lights (Night only, along road borders)
-    if(timeOfDay === 'night' && streetLights.length < MAX_STREETLIGHTS && Math.random() < 0.05) {
+    if (timeOfDay === 'night' && streetLights.length < MAX_STREETLIGHTS && Math.random() < 0.05) {
         let isLeft = Math.random() > 0.5;
         let x = isLeft ? -20.5 : 20.5;
         streetLights.push({ x: x, z: spawnZ });
@@ -855,9 +909,9 @@ function spawnEnvironmentObjects() {
 }
 
 // --- Game State ---
-let gameState = 'start'; 
+let gameState = 'start';
 const timer = new THREE.Timer();
-let scrollSpeed = 40; 
+let scrollSpeed = 40;
 let distance = 0;
 let levelLength = 500;
 let runCoinsCollected = 0;
@@ -890,8 +944,8 @@ const MAX_HUMANS = 1500;
 // Geometry definitions for humanoid body parts (shared across all instanced meshes)
 const headGeo = new THREE.SphereGeometry(0.4, 8, 8);
 const bodyGeo = new THREE.BoxGeometry(0.6, 0.8, 0.4);
-const armGeo  = new THREE.BoxGeometry(0.25, 0.55, 0.25);
-const legGeo  = new THREE.BoxGeometry(0.25, 0.55, 0.25);
+const armGeo = new THREE.BoxGeometry(0.25, 0.55, 0.25);
+const legGeo = new THREE.BoxGeometry(0.25, 0.55, 0.25);
 
 // Self-illuminating materials — troops and enemies glow in the dark at night biomes
 const troopMaterial = new THREE.MeshPhysicalMaterial({
@@ -937,29 +991,29 @@ allMeshes.forEach(m => {
 let troops = []; let enemies = []; let playerCenterX = 0; let finishLineSpawned = false; let finishLineMesh = null;
 
 // Pre-allocated objects reused every frame — avoids 1000+ GC allocations per second
-const _dummy   = new THREE.Object3D();
+const _dummy = new THREE.Object3D();
 const _baseObj = new THREE.Object3D();
 
 function updateHumanoidMeshes() {
     const dummy = _dummy;
     // CRITICAL: reset scale from previous frame's hide-loop — without this all troops are invisible
     dummy.scale.set(1, 1, 1);
-    
+
     let tIdx = 0;
     let eIdx = 0;
-    
+
     function drawHuman(h, isEnemy) {
         let meshes = isEnemy ? [headMeshE, bodyMeshE, lArmMeshE, rArmMeshE, lLegMeshE, rLegMeshE] : [headMeshT, bodyMeshT, lArmMeshT, rArmMeshT, lLegMeshT, rLegMeshT];
         let idx = isEnemy ? eIdx : tIdx;
-        if(idx >= MAX_HUMANS) return;
-        
-        let time = performance.now() * 0.01; 
+        if (idx >= MAX_HUMANS) return;
+
+        let time = performance.now() * 0.01;
         let scale = h.isBoss ? 4.0 : 1.0;
-        
+
         let legRot = 0; let armRot = 0; let yOffset = 0;
         if (h.state === 'running') {
             legRot = Math.sin(time + h.animOffset) * 0.8; armRot = Math.cos(time + h.animOffset) * 0.8;
-            yOffset = Math.abs(Math.sin((time + h.animOffset)*2)) * 0.1 * scale;
+            yOffset = Math.abs(Math.sin((time + h.animOffset) * 2)) * 0.1 * scale;
         } else if (h.state === 'fighting') {
             armRot = Math.sin(time * 3 + h.animOffset) * 1.5; legRot = 0.2;
         }
@@ -970,40 +1024,40 @@ function updateHumanoidMeshes() {
             // Flash white on hit
             color = new THREE.Color(0xffffff);
         }
-        
+
         // Reuse pre-allocated _baseObj — no per-frame heap allocation
         const baseObj = _baseObj;
         baseObj.position.set(h.x, yOffset, h.z); baseObj.scale.setScalar(scale);
         baseObj.rotation.set(0, 0, 0);
-        
-        dummy.position.set(0, 1.0, 0); dummy.rotation.set(0,0,0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[0].setMatrixAt(idx, dummy.matrixWorld); meshes[0].setColorAt(idx, color); baseObj.remove(dummy);
-        dummy.position.set(0, 0.5, 0); dummy.rotation.set(0,0,0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[1].setMatrixAt(idx, dummy.matrixWorld); meshes[1].setColorAt(idx, color); baseObj.remove(dummy);
+
+        dummy.position.set(0, 1.0, 0); dummy.rotation.set(0, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[0].setMatrixAt(idx, dummy.matrixWorld); meshes[0].setColorAt(idx, color); baseObj.remove(dummy);
+        dummy.position.set(0, 0.5, 0); dummy.rotation.set(0, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[1].setMatrixAt(idx, dummy.matrixWorld); meshes[1].setColorAt(idx, color); baseObj.remove(dummy);
         dummy.position.set(-0.35, 0.6, 0); dummy.rotation.set(armRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[2].setMatrixAt(idx, dummy.matrixWorld); meshes[2].setColorAt(idx, color); baseObj.remove(dummy);
         dummy.position.set(0.35, 0.6, 0); dummy.rotation.set(-armRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[3].setMatrixAt(idx, dummy.matrixWorld); meshes[3].setColorAt(idx, color); baseObj.remove(dummy);
         dummy.position.set(-0.15, 0.25, 0); dummy.rotation.set(-legRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[4].setMatrixAt(idx, dummy.matrixWorld); meshes[4].setColorAt(idx, color); baseObj.remove(dummy);
         dummy.position.set(0.15, 0.25, 0); dummy.rotation.set(legRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[5].setMatrixAt(idx, dummy.matrixWorld); meshes[5].setColorAt(idx, color); baseObj.remove(dummy);
-        
+
         if (isEnemy) eIdx++; else tIdx++;
     }
-    
-    troops.forEach(t => drawHuman(t, false)); 
+
+    troops.forEach(t => drawHuman(t, false));
     enemies.forEach(e => drawHuman(e, true));
-    
+
     // Reset / Hide unused instances
-    dummy.scale.set(0,0,0); dummy.updateMatrixWorld(true);
-    for(let i=tIdx; i<MAX_HUMANS; i++) {
+    dummy.scale.set(0, 0, 0); dummy.updateMatrixWorld(true);
+    for (let i = tIdx; i < MAX_HUMANS; i++) {
         headMeshT.setMatrixAt(i, dummy.matrixWorld); bodyMeshT.setMatrixAt(i, dummy.matrixWorld);
         lArmMeshT.setMatrixAt(i, dummy.matrixWorld); rArmMeshT.setMatrixAt(i, dummy.matrixWorld);
         lLegMeshT.setMatrixAt(i, dummy.matrixWorld); rLegMeshT.setMatrixAt(i, dummy.matrixWorld);
     }
-    for(let i=eIdx; i<MAX_HUMANS; i++) {
+    for (let i = eIdx; i < MAX_HUMANS; i++) {
         headMeshE.setMatrixAt(i, dummy.matrixWorld); bodyMeshE.setMatrixAt(i, dummy.matrixWorld);
         lArmMeshE.setMatrixAt(i, dummy.matrixWorld); rArmMeshE.setMatrixAt(i, dummy.matrixWorld);
         lLegMeshE.setMatrixAt(i, dummy.matrixWorld); rLegMeshE.setMatrixAt(i, dummy.matrixWorld);
     }
-    
-    allMeshes.forEach(m => { 
-        m.instanceMatrix.needsUpdate = true; 
+
+    allMeshes.forEach(m => {
+        m.instanceMatrix.needsUpdate = true;
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
     });
     troopCountEl.innerText = troops.length;
@@ -1018,8 +1072,8 @@ const cachedWallGeo = new THREE.BoxGeometry(18, 6, 1);
 const cachedSpikeGeo = new THREE.BoxGeometry(12, 0.2, 6);
 
 const barrierMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.5, metalness: 0.5 });
-const wallMat    = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.1 });
-const spikeMat   = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xff1100, emissiveIntensity: 0.8, roughness: 0.8 });
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.1 });
+const spikeMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xff1100, emissiveIntensity: 0.8, roughness: 0.8 });
 
 let powerups = [];
 const cachedPowerupGeo = new THREE.OctahedronGeometry(1.0);
@@ -1061,21 +1115,21 @@ function createGateTexture(text, colorHex) {
 function spawnGates() {
     const z = -250;
     const isLeftPositive = Math.random() > 0.5;
-    let t1 = isLeftPositive ? (Math.random()>0.5?'add':'mul') : 'sub';
-    let t2 = isLeftPositive ? 'sub' : (Math.random()>0.5?'add':'mul');
-    if(Math.random() > 0.8) { t1 = 'add'; t2 = 'mul'; }
+    let t1 = isLeftPositive ? (Math.random() > 0.5 ? 'add' : 'mul') : 'sub';
+    let t2 = isLeftPositive ? 'sub' : (Math.random() > 0.5 ? 'add' : 'mul');
+    if (Math.random() > 0.8) { t1 = 'add'; t2 = 'mul'; }
 
-    let v1 = t1 === 'mul' ? Math.floor(Math.random()*2)+2 : Math.floor(Math.random()*20)+5;
-    let v2 = t2 === 'mul' ? Math.floor(Math.random()*2)+2 : Math.floor(Math.random()*20)+5;
+    let v1 = t1 === 'mul' ? Math.floor(Math.random() * 2) + 2 : Math.floor(Math.random() * 20) + 5;
+    let v2 = t2 === 'mul' ? Math.floor(Math.random() * 2) + 2 : Math.floor(Math.random() * 20) + 5;
 
-    let c1 = (t1==='add'||t1==='mul') ? '#00ff66' : '#ff3333';
-    let c2 = (t2==='add'||t2==='mul') ? '#00ff66' : '#ff3333';
+    let c1 = (t1 === 'add' || t1 === 'mul') ? '#00ff66' : '#ff3333';
+    let c2 = (t2 === 'add' || t2 === 'mul') ? '#00ff66' : '#ff3333';
 
     // Reuse cached geometry to avoid memory leaks
-    const mat1 = new THREE.MeshStandardMaterial({ map: createGateTexture(t1==='add'?'+'+v1:t1==='sub'?'-'+v1:'x'+v1, c1), emissive: new THREE.Color(c1), emissiveIntensity: 0.5 });
+    const mat1 = new THREE.MeshStandardMaterial({ map: createGateTexture(t1 === 'add' ? '+' + v1 : t1 === 'sub' ? '-' + v1 : 'x' + v1, c1), emissive: new THREE.Color(c1), emissiveIntensity: 0.5 });
     const mesh1 = new THREE.Mesh(cachedGateGeo, mat1); mesh1.position.set(-10, 4, z); mesh1.castShadow = true; scene.add(mesh1);
-    
-    const mat2 = new THREE.MeshStandardMaterial({ map: createGateTexture(t2==='add'?'+'+v2:t2==='sub'?'-'+v2:'x'+v2, c2), emissive: new THREE.Color(c2), emissiveIntensity: 0.5 });
+
+    const mat2 = new THREE.MeshStandardMaterial({ map: createGateTexture(t2 === 'add' ? '+' + v2 : t2 === 'sub' ? '-' + v2 : 'x' + v2, c2), emissive: new THREE.Color(c2), emissiveIntensity: 0.5 });
     const mesh2 = new THREE.Mesh(cachedGateGeo, mat2); mesh2.position.set(10, 4, z); mesh2.castShadow = true; scene.add(mesh2);
 
     gates.push({ mesh: mesh1, type: t1, value: v1, used: false });
@@ -1085,13 +1139,13 @@ function spawnGates() {
 function spawnEnemies() {
     const z = -250;
     let isBoss = Math.random() > BOSS_SPAWN_CHANCE && saveState.level > 1;
-    if(isBoss) {
-        enemies.push({ x: 0, z: z, hp: 50 * saveState.level, maxHp: 50 * saveState.level, flashTimer: 0, isBoss: true, radiusSq: 36.0, state: 'running', animOffset: Math.random()*10 }); 
+    if (isBoss) {
+        enemies.push({ x: 0, z: z, hp: 50 * saveState.level, maxHp: 50 * saveState.level, flashTimer: 0, isBoss: true, radiusSq: 36.0, state: 'running', animOffset: Math.random() * 10 });
         spawnFloatingText(0, 10, z, "BOSS!", "#ff0000");
     } else {
-        let count = Math.floor(Math.random() * 5) + 3 + Math.floor(saveState.level/2);
-        for(let i=0; i<count; i++) {
-            enemies.push({ x: (Math.random()-0.5)*24, z: z + Math.random()*15, hp: 2, maxHp: 2, flashTimer: 0, isBoss: false, radiusSq: 2.25, state: 'running', animOffset: Math.random()*10 });
+        let count = Math.floor(Math.random() * 5) + 3 + Math.floor(saveState.level / 2);
+        for (let i = 0; i < count; i++) {
+            enemies.push({ x: (Math.random() - 0.5) * 24, z: z + Math.random() * 15, hp: 2, maxHp: 2, flashTimer: 0, isBoss: false, radiusSq: 2.25, state: 'running', animOffset: Math.random() * 10 });
         }
     }
 }
@@ -1099,7 +1153,7 @@ function spawnObstacle() {
     const z = -250;
     const r = Math.random();
     let mesh, type, x;
-    
+
     if (r < 0.35) {
         // Low Barrier
         type = 'barrier';
@@ -1120,7 +1174,7 @@ function spawnObstacle() {
         mesh = new THREE.Mesh(cachedSpikeGeo, spikeMat);
         mesh.position.set(x, 0.1, z);
     }
-    
+
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -1141,7 +1195,7 @@ function spawnPowerup() {
         type = 'magnet';
         mat = powerupMatMagnet;
     }
-    
+
     const x = (Math.random() - 0.5) * 20;
     const mesh = new THREE.Mesh(cachedPowerupGeo, mat);
     mesh.position.set(x, 1.2, z);
@@ -1150,7 +1204,7 @@ function spawnPowerup() {
     powerups.push({ mesh: mesh, type: type, x: x, collected: false });
 }
 const MAX_COINS = 100;
-const coinGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32); 
+const coinGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32);
 const coinMat = new THREE.MeshPhysicalMaterial({ color: 0xffd700, metalness: 1.0, roughness: 0.2, emissive: 0xaa8800, emissiveIntensity: 0.5 });
 const coinsMesh = new THREE.InstancedMesh(coinGeo, coinMat, MAX_COINS);
 coinsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); coinsMesh.castShadow = true; scene.add(coinsMesh);
@@ -1282,21 +1336,21 @@ function createGlowTexture(colorHex) {
     const ctx = c.getContext('2d');
     const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     const col = new THREE.Color(colorHex);
-    grad.addColorStop(0, `rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.9)`);
-    grad.addColorStop(0.5, `rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)},0.3)`);
+    grad.addColorStop(0, `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},0.9)`);
+    grad.addColorStop(0.5, `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},0.3)`);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
 }
 
-const glowTexTroop  = createGlowTexture(0x00e5ff);
-const glowTexEnemy  = createGlowTexture(0xff3333);
-const glowTexBoss   = createGlowTexture(0xff0000);
+const glowTexTroop = createGlowTexture(0x00e5ff);
+const glowTexEnemy = createGlowTexture(0xff3333);
+const glowTexBoss = createGlowTexture(0xff0000);
 
 const MAX_GLOW_SPRITES = 800;
-const glowMatTroop = new THREE.SpriteMaterial({ map: glowTexTroop,  transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
-const glowMatEnemy = new THREE.SpriteMaterial({ map: glowTexEnemy,  transparent: true, opacity: 0.5,  blending: THREE.AdditiveBlending, depthWrite: false });
-const glowMatBoss  = new THREE.SpriteMaterial({ map: glowTexBoss,   transparent: true, opacity: 0.7,  blending: THREE.AdditiveBlending, depthWrite: false });
+const glowMatTroop = new THREE.SpriteMaterial({ map: glowTexTroop, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+const glowMatEnemy = new THREE.SpriteMaterial({ map: glowTexEnemy, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+const glowMatBoss = new THREE.SpriteMaterial({ map: glowTexBoss, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
 
 // Glow sprites pools (reused — no per-frame allocation)
 const glowSpritesTroop = [];
@@ -1340,7 +1394,7 @@ function updateGlowSprites(bossTime) {
 
 // ─── HUD Animation Helpers ────────────────────────────────────────────────────
 let _lastTroopCount = 0;
-let _lastCoinCount  = 0;
+let _lastCoinCount = 0;
 
 function hudTroopPop() {
     if (!hudTroopsEl) return;
@@ -1385,19 +1439,19 @@ function updateCoinsMesh(dt, effectiveScrollSpeed) {
     for (let i = 0; i < MAX_COINS; i++) {
         if (i < coinsList.length) {
             let c = coinsList[i]; c.rot += dt * 3;
-            dummy.position.set(c.x, 0.5, c.z); dummy.rotation.set(Math.PI/2, c.rot, 0); dummy.updateMatrix();
+            dummy.position.set(c.x, 0.5, c.z); dummy.rotation.set(Math.PI / 2, c.rot, 0); dummy.updateMatrix();
             coinsMesh.setMatrixAt(i, dummy.matrix);
-        } else { dummy.scale.set(0,0,0); dummy.updateMatrix(); coinsMesh.setMatrixAt(i, dummy.matrix); }
+        } else { dummy.scale.set(0, 0, 0); dummy.updateMatrix(); coinsMesh.setMatrixAt(i, dummy.matrix); }
     }
     coinsMesh.instanceMatrix.needsUpdate = true;
 }
 function spawnCoins() {
     const z = -250; let trackX = (Math.random() - 0.5) * 20;
-    for(let i=0; i<8; i++) { if(coinsList.length < MAX_COINS) coinsList.push({ x: trackX, z: z - i*2.5, rot: Math.random()*Math.PI }); }
+    for (let i = 0; i < 8; i++) { if (coinsList.length < MAX_COINS) coinsList.push({ x: trackX, z: z - i * 2.5, rot: Math.random() * Math.PI }); }
 }
 
 function spawnFinishLine() {
-    if(finishLineMesh) return;
+    if (finishLineMesh) return;
     const geo = new THREE.BoxGeometry(40, 2, 2);
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.0 });
     finishLineMesh = new THREE.Mesh(geo, mat); finishLineMesh.position.set(0, 0, -250); scene.add(finishLineMesh);
@@ -1411,28 +1465,28 @@ const particlesMesh = new THREE.InstancedMesh(particleGeo, particleMat, MAX_PART
 particlesMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(particlesMesh);
 let particles = [];
 
-function spawnParticles(x, y, z, colorHex, count, explodeSpeed=15) {
-    for(let i=0; i<count; i++) {
-        if(particles.length >= MAX_PARTICLES) break;
+function spawnParticles(x, y, z, colorHex, count, explodeSpeed = 15) {
+    for (let i = 0; i < count; i++) {
+        if (particles.length >= MAX_PARTICLES) break;
         particles.push({
-            x: x, y: y, z: z, vx: (Math.random()-0.5)*explodeSpeed, vy: Math.random()*explodeSpeed/2 + 5, vz: (Math.random()-0.5)*explodeSpeed,
+            x: x, y: y, z: z, vx: (Math.random() - 0.5) * explodeSpeed, vy: Math.random() * explodeSpeed / 2 + 5, vz: (Math.random() - 0.5) * explodeSpeed,
             life: 1.0, color: new THREE.Color(colorHex)
         });
     }
 }
 function updateParticlesMesh(dt) {
     const dummy = new THREE.Object3D();
-    for(let i=0; i<MAX_PARTICLES; i++) {
-        if(i < particles.length) {
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+        if (i < particles.length) {
             let p = particles[i];
             p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 30 * dt; p.life -= dt * 2;
-            if(p.y < 0) p.y = 0;
+            if (p.y < 0) p.y = 0;
             dummy.position.set(p.x, p.y, p.z); dummy.scale.setScalar(Math.max(0, p.life)); dummy.updateMatrix();
             particlesMesh.setMatrixAt(i, dummy.matrix); particlesMesh.setColorAt(i, p.color);
-        } else { dummy.scale.set(0,0,0); dummy.updateMatrix(); particlesMesh.setMatrixAt(i, dummy.matrix); }
+        } else { dummy.scale.set(0, 0, 0); dummy.updateMatrix(); particlesMesh.setMatrixAt(i, dummy.matrix); }
     }
     particlesMesh.instanceMatrix.needsUpdate = true;
-    if(particlesMesh.instanceColor) particlesMesh.instanceColor.needsUpdate = true;
+    if (particlesMesh.instanceColor) particlesMesh.instanceColor.needsUpdate = true;
     particles = particles.filter(p => p.life > 0);
 }
 
@@ -1444,14 +1498,14 @@ function createTextSprite(text, colorHex) {
     ctx.strokeText(text, 64, 32); ctx.fillText(text, 64, 32);
     return new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
 }
-function spawnFloatingText(x, y, z, text, colorHex, scale=3) {
-    const sprite = createTextSprite(text, colorHex); sprite.position.set(x, y, z); sprite.scale.set(scale, scale/2, 1);
+function spawnFloatingText(x, y, z, text, colorHex, scale = 3) {
+    const sprite = createTextSprite(text, colorHex); sprite.position.set(x, y, z); sprite.scale.set(scale, scale / 2, 1);
     scene.add(sprite); textSprites.push({ sprite: sprite, life: 1.0 });
 }
 function updateTextSprites(dt) {
     textSprites.forEach(t => {
         t.life -= dt * 1.5; t.sprite.position.y += dt * 5; t.sprite.material.opacity = Math.max(0, t.life);
-        if(t.life <= 0) {
+        if (t.life <= 0) {
             scene.remove(t.sprite);
             t.sprite.material.map.dispose();
             t.sprite.material.dispose();
@@ -1463,58 +1517,58 @@ function updateTextSprites(dt) {
 // --- Logic ---
 function initGame() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    
+
     troops = []; gates.forEach(g => {
         scene.remove(g.mesh);
         g.mesh.material.map.dispose();
         g.mesh.material.dispose();
         // Note: do NOT dispose g.mesh.geometry — it's the shared cachedGateGeo
     }); gates = []; textSprites.forEach(t => scene.remove(t.sprite)); textSprites = [];
-    if(finishLineMesh) { scene.remove(finishLineMesh); finishLineMesh = null; }
-    enemies = []; particles = []; coinsList = []; 
+    if (finishLineMesh) { scene.remove(finishLineMesh); finishLineMesh = null; }
+    enemies = []; particles = []; coinsList = [];
     buildings = []; lakes = []; mountains = []; trees = []; streetLights = [];
     if (typeof streetLightPool !== 'undefined') {
         streetLightPool.forEach(p => { p.light.intensity = 0; p.light.visible = false; });
     }
-    
+
     obstacles.forEach(o => scene.remove(o.mesh)); obstacles = [];
     powerups.forEach(p => scene.remove(p.mesh)); powerups = [];
     activePowerups = { speedTimer: 0, shield: false, magnetTimer: 0 };
     if (shieldBubbleMesh) shieldBubbleMesh.scale.set(0, 0, 0);
     if (bossHbBgMesh) bossHbBgMesh.visible = false;
     if (bossHbFillMesh) bossHbFillMesh.visible = false;
-    
+
     document.getElementById('badge-speed').style.display = 'none';
     document.getElementById('badge-shield').style.display = 'none';
     document.getElementById('badge-magnet').style.display = 'none';
-    
+
     runCoinsCollected = 0; screenShakeTime = 0; finishLineSpawned = false;
     biomeTime = 0;
     trailInstances = [];
     ambientParticles = [];
     _lastTroopCount = 0;
-    _lastCoinCount  = 0;
+    _lastCoinCount = 0;
     if (speedLinesEl) speedLinesEl.classList.remove('active', 'boss-danger');
     // Reset biome bloom to defaults
     bloomPass.strength = 0.8; bloomPass.threshold = 0.85;
-    
+
     targetX = 0; playerCenterX = 0; distance = 0; scrollSpeed = SCROLL_SPEED_BASE;
     levelLength = LEVEL_BASE_LENGTH + (saveState.level * LEVEL_LENGTH_SCALE);
 
     applyBiomeSettings();
 
     let startCount = saveState.upgradeTroops;
-    for(let i=0; i<startCount; i++) {
-        let col = new THREE.Color().setHSL(0.5 + (Math.random()-0.5)*0.15, 0.95, 0.5);
-        troops.push({ x: 0, z: 0, offsetX: (Math.random()-0.5)*5, offsetZ: (Math.random()-0.5)*5, state: 'running', animOffset: Math.random()*10, fightTimer: 0, color: col });
+    for (let i = 0; i < startCount; i++) {
+        let col = new THREE.Color().setHSL(0.5 + (Math.random() - 0.5) * 0.15, 0.95, 0.5);
+        troops.push({ x: 0, z: 0, offsetX: (Math.random() - 0.5) * 5, offsetZ: (Math.random() - 0.5) * 5, state: 'running', animOffset: Math.random() * 10, fightTimer: 0, color: col });
     }
-    
+
     gameState = 'playing';
-    startScreen.style.display     = 'none';
-    gameOverScreen.style.display  = 'none';
+    startScreen.style.display = 'none';
+    gameOverScreen.style.display = 'none';
     levelCompleteScreen.style.display = 'none';
-    pauseScreen.style.display     = 'none';
-    scoreDisplay.style.display    = 'flex';
+    pauseScreen.style.display = 'none';
+    scoreDisplay.style.display = 'flex';
     timer.reset();
 }
 
@@ -1531,18 +1585,18 @@ function triggerScreenShake(duration, intensity) {
 function adjustTroopCount(newCount, x, z) {
     newCount = Math.max(0, Math.min(newCount, MAX_CROWD));
     let diff = newCount - troops.length;
-    
+
     if (diff < 0 && activePowerups.shield) {
         activePowerups.shield = false;
         spawnParticles(playerCenterX, 1, 0, 0x00aaff, 40);
         spawnFloatingText(playerCenterX, 3, 0, "SHIELD ABSORBED!", "#00aaff");
         return;
     }
-    
+
     if (diff > 0) {
-        for(let i=0; i<diff; i++) {
-            let col = new THREE.Color().setHSL(0.5 + (Math.random()-0.5)*0.15, 0.95, 0.5);
-            troops.push({ x: playerCenterX, z: 0, offsetX: (Math.random()-0.5)*10, offsetZ: (Math.random()-0.5)*10, state: 'running', animOffset: Math.random()*10, fightTimer: 0, color: col });
+        for (let i = 0; i < diff; i++) {
+            let col = new THREE.Color().setHSL(0.5 + (Math.random() - 0.5) * 0.15, 0.95, 0.5);
+            troops.push({ x: playerCenterX, z: 0, offsetX: (Math.random() - 0.5) * 10, offsetZ: (Math.random() - 0.5) * 10, state: 'running', animOffset: Math.random() * 10, fightTimer: 0, color: col });
         }
         spawnParticles(playerCenterX, 1, 0, 0x00ff66, 20);
         spawnFloatingText(x, 4, z, "+" + diff, "#00ff66"); SoundEngine.gateGood();
@@ -1607,19 +1661,19 @@ function updateGame(dt) {
 
     distance += effectiveScrollSpeed * dt;
     playerCenterX += (targetX - playerCenterX) * 5 * dt;
-    
+
     enemies.forEach(e => {
-        if(e.dead) return;
+        if (e.dead) return;
         e.z += effectiveScrollSpeed * dt;
-        if(e.flashTimer > 0) e.flashTimer -= dt;
-        
+        if (e.flashTimer > 0) e.flashTimer -= dt;
+
         let eRadius = e.isBoss ? 4.0 : 1.5;
         let distToPlayer = Math.abs(e.z) + Math.abs(e.x - playerCenterX);
         if (distToPlayer < clusterRadius + eRadius + 5) {
             troops.forEach(t => {
-                if(t.state === 'running' && !e.dead) {
+                if (t.state === 'running' && !e.dead) {
                     let dx = t.x - e.x; let dz = t.z - e.z;
-                    if(dx*dx + dz*dz < (eRadius + 1.5)*(eRadius + 1.5)) { t.state = 'fighting'; t.targetEnemy = e; }
+                    if (dx * dx + dz * dz < (eRadius + 1.5) * (eRadius + 1.5)) { t.state = 'fighting'; t.targetEnemy = e; }
                 }
             });
         }
@@ -1630,7 +1684,7 @@ function updateGame(dt) {
     if (activeBoss) {
         bossHbBgMesh.visible = true;
         bossHbFillMesh.visible = true;
-        
+
         let pct = Math.max(0, activeBoss.hp / activeBoss.maxHp);
         bossHbBgMesh.position.set(activeBoss.x, 8.0, activeBoss.z);
         bossHbFillMesh.scale.set(pct, 1, 1);
@@ -1640,14 +1694,14 @@ function updateGame(dt) {
         bossHbFillMesh.visible = false;
     }
 
-    for(let i=0; i<troops.length; i++) {
+    for (let i = 0; i < troops.length; i++) {
         let t = troops[i];
         if (t.state === 'fighting') {
             if (!t.targetEnemy || t.targetEnemy.dead) { t.state = 'running'; t.targetEnemy = null; }
             else {
-                t.x += (t.targetEnemy.x + (Math.random()-0.5)*2 - t.x) * 5 * dt; t.z += (t.targetEnemy.z + (Math.random()-0.5)*2 - t.z) * 5 * dt;
+                t.x += (t.targetEnemy.x + (Math.random() - 0.5) * 2 - t.x) * 5 * dt; t.z += (t.targetEnemy.z + (Math.random() - 0.5) * 2 - t.z) * 5 * dt;
                 t.fightTimer += dt;
-                if(t.fightTimer > TROOP_FIGHT_INTERVAL) {
+                if (t.fightTimer > TROOP_FIGHT_INTERVAL) {
                     t.fightTimer = 0;
                     let dmg = 1 + (saveState.upgradeAttack - 1) * 0.5;
                     t.targetEnemy.hp -= dmg;
@@ -1666,7 +1720,7 @@ function updateGame(dt) {
                     if (Math.random() < finalDeathChance) { t.dead = true; spawnParticles(t.x, 1, t.z, 0xff3333, 5); }
 
                     // Enemy kill
-                    if(t.targetEnemy.hp <= 0 && !t.targetEnemy.dead) {
+                    if (t.targetEnemy.hp <= 0 && !t.targetEnemy.dead) {
                         t.targetEnemy.dead = true;
                         if (t.targetEnemy.isBoss) {
                             // Boss kill — massive impact
@@ -1696,31 +1750,31 @@ function updateGame(dt) {
                 const checkCount = Math.min(troops.length, SEPARATION_NEIGHBORS);
                 // Sample neighbors starting from a random offset to avoid always checking the same subset
                 const startJ = troops.length <= SEPARATION_NEIGHBORS ? 0 : Math.floor(Math.random() * troops.length);
-                for(let k = 0; k < checkCount; k++) {
+                for (let k = 0; k < checkCount; k++) {
                     const j = (startJ + k) % troops.length;
-                    if(i === j) continue;
+                    if (i === j) continue;
                     const o = troops[j];
                     const dx = t.offsetX - o.offsetX; const dz = t.offsetZ - o.offsetZ;
-                    const distSq = dx*dx + dz*dz;
-                    if(distSq < 1.0 && distSq > 0) {
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq < 1.0 && distSq > 0) {
                         const push = (1.0 - distSq) * 0.5;
                         sepX += dx * push; sepZ += dz * push;
                     }
                 }
                 t.offsetX += sepX; t.offsetZ += sepZ;
             }
-            const dist = Math.sqrt(t.offsetX*t.offsetX + t.offsetZ*t.offsetZ);
+            const dist = Math.sqrt(t.offsetX * t.offsetX + t.offsetZ * t.offsetZ);
             if (dist > clusterRadius) { t.offsetX = (t.offsetX / dist) * clusterRadius; t.offsetZ = (t.offsetZ / dist) * clusterRadius; }
             t.x += (playerCenterX + t.offsetX - t.x) * 5 * dt; t.z += (0 + t.offsetZ - t.z) * 5 * dt;
         }
     }
-    
+
     let preCount = troops.length; troops = troops.filter(t => !t.dead);
-    if(preCount !== troops.length && troops.length === 0) {
+    if (preCount !== troops.length && troops.length === 0) {
         gameState = 'gameover';
-        scoreDisplay.style.display  = 'none';
+        scoreDisplay.style.display = 'none';
         gameOverScreen.style.display = 'flex';
-        runCoinsGameOverEl.innerText  = runCoinsCollected;
+        runCoinsGameOverEl.innerText = runCoinsCollected;
         if (defeatLevelEl) defeatLevelEl.innerText = saveState.level;
         saveState.coins += runCoinsCollected; saveGame(); return;
     }
@@ -1747,8 +1801,8 @@ function updateGame(dt) {
             const survivors = troops.length;
             let bonus = Math.floor(survivors * BONUS_COINS_RATIO);
             survivingTroopsEl.innerText = survivors;
-            bonusCoinsEl.innerText      = bonus;
-            if (starRatingEl)    starRatingEl.textContent    = getStarRating(survivors);
+            bonusCoinsEl.innerText = bonus;
+            if (starRatingEl) starRatingEl.textContent = getStarRating(survivors);
             if (nextBiomeNameEl) nextBiomeNameEl.textContent = getBiomeInfo(saveState.level + 1).name;
             saveState.coins += runCoinsCollected + bonus; saveState.level += 1; saveGame(); SoundEngine.victory();
             triggerFlash('victory');
@@ -1782,9 +1836,9 @@ function updateGame(dt) {
             const isLeftGate = g.mesh.position.x < 0;
             const playerOnLeftSide = playerCenterX < 0;
             if ((isLeftGate && playerOnLeftSide) || (!isLeftGate && !playerOnLeftSide)) {
-                g.used = true; gates.forEach(og => { if(Math.abs(og.mesh.position.z - g.mesh.position.z)<2) og.used = true; });
+                g.used = true; gates.forEach(og => { if (Math.abs(og.mesh.position.z - g.mesh.position.z) < 2) og.used = true; });
                 let newCount = troops.length;
-                if(g.type==='add') newCount += g.value; if(g.type==='sub') newCount -= g.value; if(g.type==='mul') newCount *= g.value;
+                if (g.type === 'add') newCount += g.value; if (g.type === 'sub') newCount -= g.value; if (g.type === 'mul') newCount *= g.value;
                 adjustTroopCount(newCount, g.mesh.position.x, g.mesh.position.z);
             }
         }
@@ -1802,7 +1856,7 @@ function updateGame(dt) {
                 if (o.type === 'barrier' && Math.abs(playerCenterX - o.mesh.position.x) < 4.5) isColliding = true;
                 else if (o.type === 'wall' && Math.abs(playerCenterX - o.mesh.position.x) < 9.5) isColliding = true;
                 else if (o.type === 'spike' && Math.abs(playerCenterX - o.mesh.position.x) < 6.5) isColliding = true;
-                
+
                 if (isColliding) {
                     activePowerups.shield = false;
                     o.hit = true;
@@ -1813,7 +1867,7 @@ function updateGame(dt) {
                     return;
                 }
             }
-            
+
             // Troop collisions
             troops.forEach(t => {
                 if (t.dead) return;
@@ -1846,15 +1900,15 @@ function updateGame(dt) {
     powerups.forEach(p => {
         p.mesh.position.z += effectiveScrollSpeed * dt;
         p.mesh.rotation.y += dt * 2.0;
-        
+
         let dx = playerCenterX - p.mesh.position.x;
         let dz = 0 - p.mesh.position.z;
-        if (!p.collected && dx*dx + dz*dz < (clusterRadius + 1.2)*(clusterRadius + 1.2)) {
+        if (!p.collected && dx * dx + dz * dz < (clusterRadius + 1.2) * (clusterRadius + 1.2)) {
             p.collected = true;
             scene.remove(p.mesh);
             spawnParticles(p.mesh.position.x, 1.2, p.mesh.position.z, p.type === 'speed' ? 0x00ffff : p.type === 'shield' ? 0xffaa00 : 0xff00ff, 15);
             SoundEngine.gateGood();
-            
+
             if (p.type === 'speed') {
                 activePowerups.speedTimer = 4.0;
                 spawnFloatingText(p.mesh.position.x, 3, p.mesh.position.z, "SPEED BOOST!", "#00ffff");
@@ -1867,25 +1921,25 @@ function updateGame(dt) {
             }
         }
     });
-    
+
     coinsList.forEach(c => {
         c.z += effectiveScrollSpeed * dt;
-        
+
         // Magnet effect
         if (activePowerups.magnetTimer > 0) {
             let dx = playerCenterX - c.x;
             let dz = 0 - c.z;
-            let dist = Math.sqrt(dx*dx + dz*dz);
+            let dist = Math.sqrt(dx * dx + dz * dz);
             if (dist < 40) {
                 c.x += (playerCenterX - c.x) * 10 * dt;
                 c.z += (0 - c.z) * 10 * dt;
             }
         }
-        
+
         let dx = playerCenterX - c.x; let dz = 0 - c.z;
         let baseRadius = clusterRadius + 1.0 + (saveState.upgradeMagnet - 1) * 0.8;
-        if(dx*dx + dz*dz < baseRadius * baseRadius) {
-            if(!c.collected) {
+        if (dx * dx + dz * dz < baseRadius * baseRadius) {
+            if (!c.collected) {
                 c.collected = true; runCoinsCollected++; runCoinsEl.innerText = runCoinsCollected;
                 spawnParticles(c.x, 1, c.z, 0xffd700, 5); spawnFloatingText(c.x, 2, c.z, "+1", "#ffd700"); SoundEngine.coin();
                 hudCoinFlash();
@@ -1900,26 +1954,26 @@ function updateGame(dt) {
         g.mesh.material.dispose();
     });
     gates = gates.filter(g => g.mesh.position.z <= 20);
-    
+
     obstacles.filter(o => o.mesh.position.z > 20 || o.hit).forEach(o => {
         scene.remove(o.mesh);
     });
     obstacles = obstacles.filter(o => o.mesh.position.z <= 20 && !o.hit);
-    
+
     powerups.filter(p => p.mesh.position.z > 20 || p.collected).forEach(p => {
         scene.remove(p.mesh);
     });
     powerups = powerups.filter(p => p.mesh.position.z <= 20 && !p.collected);
-    
+
     enemies = enemies.filter(e => e.z <= 20 && !e.dead);
     coinsList = coinsList.filter(c => !c.collected && c.z <= 30);
     buildings = buildings.filter(b => b.z <= 100); lakes = lakes.filter(l => l.z <= 100); mountains = mountains.filter(m => m.z <= 100); trees = trees.filter(t => t.z <= 100);
     streetLights = streetLights.filter(s => s.z <= 10); // Despawn early — beam cones invade camera past z=10
 
-    updateHumanoidMeshes(); 
-    updateEnvironmentMeshes(dt, effectiveScrollSpeed); 
-    updateCoinsMesh(dt, effectiveScrollSpeed); 
-    updateParticlesMesh(dt); 
+    updateHumanoidMeshes();
+    updateEnvironmentMeshes(dt, effectiveScrollSpeed);
+    updateCoinsMesh(dt, effectiveScrollSpeed);
+    updateParticlesMesh(dt);
     updateTextSprites(dt);
 
     // ─── NEW VISUAL SYSTEMS ───
@@ -2017,11 +2071,11 @@ function animate(timestamp) {
 
 // ─── Level Intro Countdown ───────────────────────────────────────────────────
 const BIOME_INFO = [
-    { name: 'Utopia Day',      badge: 'UTOPIA',    accent: '#00e5ff', desc: 'Build your army through the golden city gates.', nextName: 'Wasteland Night' },
+    { name: 'Utopia Day', badge: 'UTOPIA', accent: '#00e5ff', desc: 'Build your army through the golden city gates.', nextName: 'Wasteland Night' },
     { name: 'Wasteland Night', badge: 'WASTELAND', accent: '#ff4422', desc: 'Survive the ruins. The enemies are stronger here.', nextName: 'Neon City Night' },
     { name: 'Neon City Night', badge: 'NEON CITY', accent: '#ff00ff', desc: 'Slick cyberpunk speedway. Watch your corners.', nextName: 'Arctic Tundra' },
-    { name: 'Arctic Tundra',   badge: 'TUNDRA',    accent: '#aaddff', desc: 'Battle through freezing snow and icy winds.', nextName: 'Lava Fields' },
-    { name: 'Lava Fields',     badge: 'LAVA FIELDS', accent: '#ff4500', desc: 'Avoid boiling lava pools and ash clouds.', nextName: 'Utopia Day' }
+    { name: 'Arctic Tundra', badge: 'TUNDRA', accent: '#aaddff', desc: 'Battle through freezing snow and icy winds.', nextName: 'Lava Fields' },
+    { name: 'Lava Fields', badge: 'LAVA FIELDS', accent: '#ff4500', desc: 'Avoid boiling lava pools and ash clouds.', nextName: 'Utopia Day' }
 ];
 
 function getBiomeInfo(level) {
@@ -2031,17 +2085,17 @@ function getBiomeInfo(level) {
 
 function showLevelIntro(callback) {
     const info = getBiomeInfo(saveState.level);
-    introLevelNum.textContent    = saveState.level;
-    introBiomeBadge.textContent  = info.badge;
+    introLevelNum.textContent = saveState.level;
+    introBiomeBadge.textContent = info.badge;
     introBiomeBadge.style.background = info.accent;
-    introBiomeName.textContent   = info.name;
-    introBiomeName.style.color   = info.accent;
-    introDesc.textContent        = info.desc;
-    introCountdown.textContent   = '3';
+    introBiomeName.textContent = info.name;
+    introBiomeName.style.color = info.accent;
+    introDesc.textContent = info.desc;
+    introCountdown.textContent = '3';
 
-    startScreen.style.display    = 'none';
+    startScreen.style.display = 'none';
     levelIntroScreen.style.display = 'flex';
-    scoreDisplay.style.display   = 'none';
+    scoreDisplay.style.display = 'none';
 
     let count = 3;
     const tick = setInterval(() => {
@@ -2074,11 +2128,11 @@ function resumeGame() {
 }
 function goToMainMenu() {
     gameState = 'menu';
-    pauseScreen.style.display     = 'none';
-    gameOverScreen.style.display  = 'none';
-    levelIntroScreen.style.display= 'none';
-    scoreDisplay.style.display    = 'none';
-    startScreen.style.display     = 'flex';
+    pauseScreen.style.display = 'none';
+    gameOverScreen.style.display = 'none';
+    levelIntroScreen.style.display = 'none';
+    scoreDisplay.style.display = 'none';
+    startScreen.style.display = 'flex';
     updateShopUI();
 }
 
@@ -2092,7 +2146,7 @@ window.addEventListener('keydown', e => {
 function updateProgressBar() {
     const pct = Math.min(100, Math.round((distance / levelLength) * 100));
     progressBarFill.style.width = pct + '%';
-    progressLabel.textContent   = pct + '%';
+    progressLabel.textContent = pct + '%';
     // Swap bar colour near end
     progressBarFill.style.background = pct > 80
         ? 'linear-gradient(90deg, #00ff88, #00cc66)'
@@ -2142,4 +2196,78 @@ buyMagnetBtn.addEventListener('click', () => {
     }
 });
 
+// ─── WebGL Context Loss Handler ─────────────────────────────────────────────
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.warn('[CrowdRunner] WebGL context lost');
+    if (webglErrorEl) webglErrorEl.style.display = 'flex';
+}, false);
+
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+    console.log('[CrowdRunner] WebGL context restored');
+    if (webglErrorEl) webglErrorEl.style.display = 'none';
+}, false);
+
+// ─── Android Back Button ────────────────────────────────────────────────
+// Pause if playing; if paused or game over, go to main menu
+document.addEventListener('backbutton', (e) => {
+    e.preventDefault();
+    if (gameState === 'playing') pauseGame();
+    else if (gameState === 'paused' || gameState === 'gameover' || gameState === 'levelcomplete') goToMainMenu();
+}, false);
+
+// ─── SoundEngine Mute Support ───────────────────────────────────────────
+// Override SoundEngine to check mute state
+const origPlayTone = SoundEngine.playTone;
+SoundEngine.playTone = function (freq, type, duration, vol = 0.1) {
+    if (isMuted) return;
+    // Reduce volume slightly when system says muted
+    origPlayTone.call(this, freq, type, duration, vol * 0.8);
+};
+
+// ─── Loading Sequence ────────────────────────────────────────────────────
+// Start loading steps, hide loading screen when Three.js is ready
+updateLoading(30, 'Initializing 3D engine...');
+
+// After Three.js setup completes (we're at end of file, everything is initialized)
+updateLoading(70, 'Loading game assets...');
+
+// Small delay so user sees the loading screen (especially important on fast devices)
+window.requestAnimationFrame(() => {
+    setTimeout(() => {
+        updateLoading(100, 'Ready!');
+        setTimeout(() => {
+            if (loadingScreen) loadingScreen.style.display = 'none';
+            // Show tutorial on first play
+            showTutorial();
+        }, 300);
+    }, 200);
+});
+
+// ─── Daily Rewards System ────────────────────────────────────────────────
+const DAILY_KEY = 'crowdRunnerDaily';
+const DAILY_REWARD = 50; // bonus coins per day
+
+function checkDailyReward() {
+    try {
+        const raw = localStorage.getItem(DAILY_KEY);
+        const today = new Date().toDateString();
+        if (!raw || raw !== today) {
+            // First play today — grant reward
+            localStorage.setItem(DAILY_KEY, today);
+            saveState.coins += DAILY_REWARD;
+            saveGame();
+            return DAILY_REWARD;
+        }
+    } catch (e) { /* localStorage unavailable */ }
+    return 0;
+}
+
+// Apply daily reward when game starts
+const dailyBonus = checkDailyReward();
+if (dailyBonus > 0) {
+    console.log('[CrowdRunner] Daily login bonus: ' + dailyBonus + ' coins!');
+}
+
+// ─── Start the loop ──────────────────────────────────────────────────────
 loadSave(); animate();
