@@ -133,15 +133,48 @@ const SoundEngine = {
 const SCROLL_SPEED_BASE = 40;    // World units per second (base run speed)
 const SCROLL_SPEED_FIGHT = 0.2;   // Multiplier applied when troops are fighting
 const MAX_CROWD = 1000;  // Hard cap on total player troops
-const BOSS_SPAWN_CHANCE = 0.8;   // Random threshold above which a boss spawns (level > 1)
 const TROOP_FIGHT_INTERVAL = 0.5;   // Seconds between each troop attack
 const TROOP_DEATH_CHANCE = 0.2;   // Probability a troop dies per attack
-const LEVEL_BASE_LENGTH = 500;   // Base distance units per level
-const LEVEL_LENGTH_SCALE = 100;   // Extra distance added per level number
+const LEVEL_BASE_LENGTH = 400;   // Base distance units per level (was 500)
+const LEVEL_LENGTH_SCALE = 80;    // Extra distance added per level number (was 100)
 const SEPARATION_NEIGHBORS = 60;    // Max neighbors checked in separation (caps O(n²) to O(n·60))
 const SEPARATION_SKIP_RAND = 0.3;   // Per-frame probability to skip sep. for a troop (perf relief)
 const GATE_SPAWN_INTERVAL = 80;    // Distance units between obstacle spawns
 const BONUS_COINS_RATIO = 0.5;   // Surviving-troop multiplier for end-of-level bonus coins
+
+// --- Difficulty Curve Helpers ---
+function getBossSpawnChance(level) {
+    // Bosses become more common at higher levels: 80% at level 1, 40% at level 20+
+    return Math.max(0.4, 0.8 - (level - 1) * 0.02);
+}
+function getEnemyBaseHp(level) {
+    // Enemies get tougher: 2 HP at level 1, 12 HP at level 20
+    return 2 + Math.floor(level * 0.5);
+}
+function getBossHp(level) {
+    // Boss HP scales smoothly: 90 at level 1, 850 at level 20
+    return 50 + 40 * level;
+}
+function getEnemyCount(level) {
+    // More enemies at higher levels: 3 at level 1, 23 at level 20
+    return Math.floor(Math.random() * 5) + 3 + level;
+}
+function getGateAddValue(level) {
+    // Gate bonuses scale with level: 5-25 at level 1, 11-31 at level 20
+    return Math.floor(Math.random() * 20) + 5 + Math.floor(level * 0.3);
+}
+function getGateSubValue(level) {
+    // Penalty gates also scale: 3-10 at level 1, 3-30 at level 20
+    return Math.floor(Math.random() * 8) + 3 + Math.floor(level * 0.5);
+}
+function getCoinSpawnCount(level) {
+    // More coins per spawn at higher levels: 8 at level 1, 28 at level 20
+    return 8 + level;
+}
+function getBonusCoinMultiplier(level) {
+    // Bonus coins scale with level: 0.5x at level 1, 2.5x at level 20
+    return 0.5 + level * 0.1;
+}
 
 // --- Meta-Game State ---
 const SAVE_KEY = 'crowdRunnerSave2';
@@ -1119,8 +1152,9 @@ function spawnGates() {
     let t2 = isLeftPositive ? 'sub' : (Math.random() > 0.5 ? 'add' : 'mul');
     if (Math.random() > 0.8) { t1 = 'add'; t2 = 'mul'; }
 
-    let v1 = t1 === 'mul' ? Math.floor(Math.random() * 2) + 2 : Math.floor(Math.random() * 20) + 5;
-    let v2 = t2 === 'mul' ? Math.floor(Math.random() * 2) + 2 : Math.floor(Math.random() * 20) + 5;
+    const lvl = saveState.level;
+    let v1 = t1 === 'mul' ? Math.floor(Math.random() * 2) + 2 : (t1 === 'add' ? getGateAddValue(lvl) : getGateSubValue(lvl));
+    let v2 = t2 === 'mul' ? Math.floor(Math.random() * 2) + 2 : (t2 === 'add' ? getGateAddValue(lvl) : getGateSubValue(lvl));
 
     let c1 = (t1 === 'add' || t1 === 'mul') ? '#00ff66' : '#ff3333';
     let c2 = (t2 === 'add' || t2 === 'mul') ? '#00ff66' : '#ff3333';
@@ -1138,14 +1172,17 @@ function spawnGates() {
 
 function spawnEnemies() {
     const z = -250;
-    let isBoss = Math.random() > BOSS_SPAWN_CHANCE && saveState.level > 1;
+    const lvl = saveState.level;
+    let isBoss = Math.random() > getBossSpawnChance(lvl) && lvl > 1;
     if (isBoss) {
-        enemies.push({ x: 0, z: z, hp: 50 * saveState.level, maxHp: 50 * saveState.level, flashTimer: 0, isBoss: true, radiusSq: 36.0, state: 'running', animOffset: Math.random() * 10 });
+        const bossHp = getBossHp(lvl);
+        enemies.push({ x: 0, z: z, hp: bossHp, maxHp: bossHp, flashTimer: 0, isBoss: true, radiusSq: 36.0, state: 'running', animOffset: Math.random() * 10 });
         spawnFloatingText(0, 10, z, "BOSS!", "#ff0000");
     } else {
-        let count = Math.floor(Math.random() * 5) + 3 + Math.floor(saveState.level / 2);
+        let count = getEnemyCount(lvl);
+        const hp = getEnemyBaseHp(lvl);
         for (let i = 0; i < count; i++) {
-            enemies.push({ x: (Math.random() - 0.5) * 24, z: z + Math.random() * 15, hp: 2, maxHp: 2, flashTimer: 0, isBoss: false, radiusSq: 2.25, state: 'running', animOffset: Math.random() * 10 });
+            enemies.push({ x: (Math.random() - 0.5) * 24, z: z + Math.random() * 15, hp: hp, maxHp: hp, flashTimer: 0, isBoss: false, radiusSq: 2.25, state: 'running', animOffset: Math.random() * 10 });
         }
     }
 }
@@ -1447,7 +1484,8 @@ function updateCoinsMesh(dt, effectiveScrollSpeed) {
 }
 function spawnCoins() {
     const z = -250; let trackX = (Math.random() - 0.5) * 20;
-    for (let i = 0; i < 8; i++) { if (coinsList.length < MAX_COINS) coinsList.push({ x: trackX, z: z - i * 2.5, rot: Math.random() * Math.PI }); }
+    const count = getCoinSpawnCount(saveState.level);
+    for (let i = 0; i < Math.min(count, 20); i++) { if (coinsList.length < MAX_COINS) coinsList.push({ x: trackX, z: z - i * 2.5, rot: Math.random() * Math.PI }); }
 }
 
 function spawnFinishLine() {
@@ -1799,7 +1837,7 @@ function updateGame(dt) {
             scoreDisplay.style.display = 'none';
             levelCompleteScreen.style.display = 'flex';
             const survivors = troops.length;
-            let bonus = Math.floor(survivors * BONUS_COINS_RATIO);
+            let bonus = Math.floor(survivors * getBonusCoinMultiplier(saveState.level));
             survivingTroopsEl.innerText = survivors;
             bonusCoinsEl.innerText = bonus;
             if (starRatingEl) starRatingEl.textContent = getStarRating(survivors);
