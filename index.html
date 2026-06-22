@@ -21,7 +21,7 @@
 <body>
   <!-- ══════════ LOADING SCREEN ══════════ -->
   <div id="loading-screen" class="screen"
-    style="z-index:100; background:#0a0a16; display:flex; flex-direction:column; gap:24px;">
+    style="z-index:100; background:#0a0a16; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px;">
     <div class="loading-logo">
       <div class="logo-icon" style="font-size:64px;">⚔</div>
       <h1
@@ -63,7 +63,7 @@
 
     <!-- ══════════ ONBOARDING TUTORIAL ══════════ -->
     <div id="tutorial-overlay"
-      style="display:none;position:absolute;inset:0;z-index:30;pointer-events:none;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
+      style="display:none;position:absolute;inset:0;z-index:30;pointer-events:auto;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">
       <div id="tutorial-step-1" class="tutorial-step"
         style="position:absolute;bottom:15%;left:50%;transform:translateX(-50%);text-align:center;color:white;font-family:'Inter',sans-serif;pointer-events:none;">
         <div style="font-size:48px;margin-bottom:8px;">👆</div>
@@ -118,6 +118,40 @@
           <p class="tagline">Build your army. Crush your enemies.</p>
         </div>
 
+        <!-- Daily Rewards Banner -->
+        <div id="daily-reward-banner" class="meta-row"
+          style="background:rgba(255,215,0,0.15);border:1px solid rgba(255,215,0,0.4);border-radius:12px;padding:10px 16px;margin-bottom:8px;cursor:pointer;">
+          <div style="font-size:20px;">🎁</div>
+          <div>
+            <div style="font-weight:700;color:#ffd700;font-size:14px;">Daily Reward</div>
+            <div id="daily-streak-text" style="font-size:11px;color:rgba(255,255,255,0.6);">Day 1 — tap to claim</div>
+          </div>
+        </div>
+
+        <!-- Event Banner -->
+        <div id="event-banner" class="meta-row"
+          style="background:rgba(255,0,128,0.15);border:1px solid rgba(255,0,128,0.4);border-radius:12px;padding:10px 16px;margin-bottom:8px;cursor:pointer;">
+          <div style="font-size:20px;">🔥</div>
+          <div>
+            <div style="font-weight:700;color:#ff007f;font-size:14px;">Weekend Event Active</div>
+            <div id="event-timer-text" style="font-size:11px;color:rgba(255,255,255,0.6);">Ends in 2d 14h 30m</div>
+          </div>
+        </div>
+
+        <!-- Quest Panel -->
+        <div id="quest-panel" class="shop-panel" style="display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(0, 229, 255, 0.4); background: rgba(0, 229, 255, 0.05); margin-bottom: 8px;">
+          <div class="shop-title" style="color: #00e5ff; margin-bottom: 4px;">🎯 Active Quest</div>
+          <div style="font-size: 13px; color: #fff; font-weight: 600; text-align: left;">Collect 15 Shields or Magnets</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.6); text-align: left; margin-bottom: 2px;">Reward: Laser Swords (+1 Damage) & Plasma Skin!</div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div style="flex: 1; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative;">
+              <div id="quest-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #00e5ff, #00aaff); transition: width 0.3s;"></div>
+            </div>
+            <span id="quest-progress-text" style="font-size: 12px; font-weight: 700; color: #00e5ff; min-width: 32px; text-align: right;">0/15</span>
+          </div>
+          <div id="quest-status-badge" style="display: none; font-size: 12px; font-weight: 700; color: #00ff88; text-align: center; margin-top: 4px;">✨ QUEST COMPLETED — UNLOCKED! ✨</div>
+        </div>
+
         <div class="meta-row">
           <div class="meta-coin-badge">🪙 <span id="coin-count">0</span> coins</div>
           <div class="meta-level-badge">Level <span id="start-level-display">1</span></div>
@@ -162,6 +196,26 @@
           </div>
         </div>
 
+        <!-- ══════════ BATTLE PASS ══════════ -->
+        <div id="battle-pass-panel" class="shop-panel"
+          style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px; background: linear-gradient(180deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05)); border: 1px solid rgba(255,215,0,0.3);">
+          <div class="shop-title" style="color:#ffd700;">👑 Battle Pass</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.6);text-align:center;">Season 1 — ends in <span
+              id="bpass-timer">3d 12h</span></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;">
+            <span style="color:#ffd700;">XP: <span id="bpass-xp">0</span></span>
+            <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+              <div id="bpass-xp-bar"
+                style="height:100%;width:0%;background:linear-gradient(90deg,#ffd700,#ffaa00);transition:width 0.3s;">
+              </div>
+            </div>
+          </div>
+          <button id="buy-battle-pass" class="btn-shop"
+            style="background:linear-gradient(135deg,#ffd700,#ffaa00);color:#000;font-weight:700;">
+            ✨ Buy Battle Pass — $4.99
+          </button>
+        </div>
+
         <!-- ══════════ IAP SHOP ══════════ -->
         <div id="iap-shop" class="shop-panel"
           style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
@@ -199,11 +253,102 @@
 
           <div class="shop-row">
             <div class="shop-info">
+              <span class="shop-name">🎖 Value Pack</span>
+              <span class="shop-level">50000 coins + Battle Pass</span>
+            </div>
+            <button id="iap-value-pack" class="btn-shop btn-iap"
+              style="background:linear-gradient(135deg,#ff00ff,#aa00ff);">
+              $14.99
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
               <span class="shop-name">🚫 Remove Ads</span>
               <span class="shop-level">Permanent</span>
             </div>
             <button id="iap-remove-ads" class="btn-shop btn-iap">
               $1.99
+            </button>
+          </div>
+        </div>
+
+        <!-- ══════════ CUSTOMIZATION SHOP (SKY & SPACE) ══════════ -->
+        <div id="customization-shop" class="shop-panel" style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+          <div class="shop-title">🌌 Sky & Space Customization</div>
+          
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🌌 Nebula Galaxy Sky</span>
+              <span class="shop-level" id="sky-nebula-desc">Procedural deep space nebula background</span>
+            </div>
+            <button id="buy-sky-nebula-btn" class="btn-shop" style="font-size:12px !important; min-width:90px;">
+              🪙 250
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">💥 Crimson Supernova Sky</span>
+              <span class="shop-level" id="sky-supernova-desc">Supernova stellar explosion effect</span>
+            </div>
+            <button id="buy-sky-supernova-btn" class="btn-shop" style="font-size:12px !important; min-width:90px;">
+              🪙 400
+            </button>
+          </div>
+
+          <div class="shop-row" style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
+            <div class="shop-info">
+              <span class="shop-name">🪐 Giant Ringed Planet</span>
+              <span class="shop-level" id="space-planet-desc">Renders a huge 3D Ringed Gas Giant in the sky</span>
+            </div>
+            <button id="buy-space-planet-btn" class="btn-shop" style="font-size:12px !important; min-width:90px;">
+              $0.99
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🛰️ Orbiting Space Station</span>
+              <span class="shop-level" id="space-station-desc">Renders a rotating 3D orbital outpost in space</span>
+            </div>
+            <button id="buy-space-station-btn" class="btn-shop" style="font-size:12px !important; min-width:90px;">
+              $1.99
+            </button>
+          </div>
+        </div>
+
+        <!-- ══════════ ENVIRONMENT DECOR UPGRADES ══════════ -->
+        <div id="decor-upgrades-shop" class="shop-panel" style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+          <div class="shop-title">🌲 Environment Decor Upgrades</div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🌲 Extra Trees Density</span>
+              <span class="shop-level">Lv <span id="decor-trees-lvl">0</span> / 5</span>
+            </div>
+            <button id="buy-decor-trees-btn" class="btn-shop">
+              🪙 50
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">💧 More Ponds / Lakes</span>
+              <span class="shop-level">Lv <span id="decor-ponds-lvl">0</span> / 5</span>
+            </div>
+            <button id="buy-decor-ponds-btn" class="btn-shop">
+              🪙 60
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🐇 Spawn Hopping Animals</span>
+              <span class="shop-level">Lv <span id="decor-animals-lvl">0</span> / 5</span>
+            </div>
+            <button id="buy-decor-animals-btn" class="btn-shop">
+              🪙 80
             </button>
           </div>
         </div>
@@ -215,6 +360,18 @@
           <div id="achievements-list" style="display:flex; flex-direction:column; gap:8px;">
             <!-- Populated by JS -->
           </div>
+        </div>
+
+        <!-- ══════════ LEADERBOARD ══════════ -->
+        <div id="leaderboard-panel" class="shop-panel"
+          style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+          <div class="shop-title">🏅 Leaderboard</div>
+          <div id="leaderboard-list" style="display:flex; flex-direction:column; gap:6px;">
+            <!-- Populated by JS -->
+          </div>
+          <button id="clear-leaderboard-btn"
+            style="font-size:11px;color:rgba(255,255,255,0.4);background:none;border:none;cursor:pointer;margin-top:4px;">Clear
+            Scores</button>
         </div>
 
         <!-- Privacy Policy Link -->
@@ -257,8 +414,25 @@
         <div class="intro-biome-badge" id="intro-biome-badge">UTOPIA</div>
         <div class="intro-level-text">LEVEL <span id="intro-level-num">1</span></div>
         <div class="intro-biome-name" id="intro-biome-name">☀ Utopia Day</div>
+        <div id="intro-event-badge"
+          style="display:none;font-size:12px;background:rgba(255,0,128,0.3);color:#ff007f;padding:4px 10px;border-radius:6px;margin-top:4px;">
+          🔥 EVENT ACTIVE</div>
         <div class="intro-desc" id="intro-desc">Build your army through the golden city gates.</div>
         <div class="intro-countdown" id="intro-countdown">3</div>
+      </div>
+    </div>
+
+    <!-- ══════════ DAILY REWARD OVERLAY ══════════ -->
+    <div id="daily-reward-overlay" class="screen" style="display:none;z-index:55;">
+      <div class="screen-inner" style="max-width:360px;">
+        <h2 style="font-family:'Rajdhani',sans-serif;font-size:24px;color:#ffd700;margin:0 0 16px;">🎁 Daily Reward</h2>
+        <div id="daily-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+          <!-- Populated by JS -->
+        </div>
+        <button id="claim-daily-btn" class="btn-primary" style="margin-top:16px;">Claim Day <span
+            id="claim-day-num">1</span></button>
+        <button class="btn-ghost" onclick="document.getElementById('daily-reward-overlay').style.display='none'"
+          style="margin-top:8px;">Close</button>
       </div>
     </div>
 

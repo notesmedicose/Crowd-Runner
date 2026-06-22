@@ -2,6 +2,13 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
+import {
+    BIOME_INFO, getBiomeInfo, getStarRating,
+    getBossSpawnChance, getEnemyBaseHp, getBossHp, getEnemyCount,
+    getGateAddValue, getGateSubValue, getCoinSpawnCount, getBonusCoinMultiplier,
+    getUpgradeCost, validateSave
+} from './src/game-logic.js';
 
 // --- Loading Screen ---
 const loadingScreen = document.getElementById('loading-screen');
@@ -300,7 +307,6 @@ function showAchievements() {
     const panel = document.getElementById('achievements-panel');
     if (panel) panel.style.display = 'flex';
 }
-function submitScore(score) { console.log('[CrowdRunner] Score submitted:', score); }
 function showLeaderboard() { console.log('[CrowdRunner] Show leaderboard UI'); }
 
 // ─── Player Skin System ─────────────────────────────────────────────────────
@@ -312,6 +318,7 @@ const AVAILABLE_SKINS = [
     { id: 'crimson', name: 'Crimson', color: 0xff3333, cost: 100, unlocked: false },
     { id: 'neon-green', name: 'Neon Green', color: 0x00ff66, cost: 150, unlocked: false },
     { id: 'purple', name: 'Purple', color: 0xaa00ff, cost: 150, unlocked: false },
+    { id: 'plasma', name: 'Plasma', color: 0xff00ff, cost: 0, unlocked: false },
 ];
 let unlockedSkins = ['cyan'];
 let selectedSkin = DEFAULT_SKIN;
@@ -384,75 +391,44 @@ function purchaseIAP(productId) {
     return true;
 }
 
-// --- Game Tuning Constants ---
-const SCROLL_SPEED_BASE = 40;    // World units per second (base run speed)
-const SCROLL_SPEED_FIGHT = 0.2;   // Multiplier applied when troops are fighting
-const MAX_CROWD = 1000;  // Hard cap on total player troops
-const TROOP_FIGHT_INTERVAL = 0.5;   // Seconds between each troop attack
-const TROOP_DEATH_CHANCE = 0.2;   // Probability a troop dies per attack
-const LEVEL_BASE_LENGTH = 400;   // Base distance units per level (was 500)
-const LEVEL_LENGTH_SCALE = 80;    // Extra distance added per level number (was 100)
-const SEPARATION_NEIGHBORS = 60;    // Max neighbors checked in separation (caps O(n²) to O(n·60))
-const SEPARATION_SKIP_RAND = 0.3;   // Per-frame probability to skip sep. for a troop (perf relief)
-const GATE_SPAWN_INTERVAL = 80;    // Distance units between obstacle spawns
-const BONUS_COINS_RATIO = 0.5;   // Surviving-troop multiplier for end-of-level bonus coins
+// --- Game Tuning Constants (from game-logic.js) ---
+const SCROLL_SPEED_BASE = 40;
+const SCROLL_SPEED_FIGHT = 0.2;
+const MAX_CROWD = 1000;
+const TROOP_FIGHT_INTERVAL = 0.5;
+const TROOP_DEATH_CHANCE = 0.2;
+const LEVEL_BASE_LENGTH = 400;
+const LEVEL_LENGTH_SCALE = 80;
+const SEPARATION_NEIGHBORS = 60;
+const SEPARATION_SKIP_RAND = 0.3;
+const GATE_SPAWN_INTERVAL = 80;
+const BONUS_COINS_RATIO = 0.5;
 
-// --- Difficulty Curve Helpers ---
-function getBossSpawnChance(level) {
-    // Bosses become more common at higher levels: 80% at level 1, 40% at level 20+
-    return Math.max(0.4, 0.8 - (level - 1) * 0.02);
-}
-function getEnemyBaseHp(level) {
-    // Enemies get tougher: 2 HP at level 1, 12 HP at level 20
-    return 2 + Math.floor(level * 0.5);
-}
-function getBossHp(level) {
-    // Boss HP scales smoothly: 90 at level 1, 850 at level 20
-    return 50 + 40 * level;
-}
-function getEnemyCount(level) {
-    // More enemies at higher levels: 3 at level 1, 23 at level 20
-    return Math.floor(Math.random() * 5) + 3 + level;
-}
-function getGateAddValue(level) {
-    // Gate bonuses scale with level: 5-25 at level 1, 11-31 at level 20
-    return Math.floor(Math.random() * 20) + 5 + Math.floor(level * 0.3);
-}
-function getGateSubValue(level) {
-    // Penalty gates also scale: 3-10 at level 1, 3-30 at level 20
-    return Math.floor(Math.random() * 8) + 3 + Math.floor(level * 0.5);
-}
-function getCoinSpawnCount(level) {
-    // More coins per spawn at higher levels: 8 at level 1, 28 at level 20
-    return 8 + level;
-}
-function getBonusCoinMultiplier(level) {
-    // Bonus coins scale with level: 0.5x at level 1, 2.5x at level 20
-    return 0.5 + level * 0.1;
-}
-
-// --- Meta-Game State ---
+// --- Meta-Game State (save/load) ---
 const SAVE_KEY = 'crowdRunnerSave2';
-const DEFAULT_SAVE = { coins: 0, upgradeTroops: 1, upgradeAttack: 1, upgradeMagnet: 1, level: 1 };
+const DEFAULT_SAVE = {
+    coins: 0,
+    upgradeTroops: 1,
+    upgradeAttack: 1,
+    upgradeMagnet: 1,
+    level: 1,
+    questProgress: 0,
+    questCompleted: false,
+    unlockedSkies: ['default'],
+    selectedSky: 'default',
+    unlockedSpaceObjects: ['none'],
+    selectedSpaceObject: 'none',
+    decorTreesLvl: 0,
+    decorPondsLvl: 0,
+    decorAnimalsLvl: 0
+};
 let saveState = { ...DEFAULT_SAVE };
-
-function validateSave(data) {
-    // Guard against corrupted or manually-edited localStorage
-    if (typeof data !== 'object' || data === null) return false;
-    if (typeof data.coins !== 'number' || data.coins < 0) return false;
-    if (typeof data.upgradeTroops !== 'number' || data.upgradeTroops < 1) return false;
-    if (typeof data.upgradeAttack !== 'number' || data.upgradeAttack < 1) return false;
-    if (typeof data.upgradeMagnet !== 'number' || data.upgradeMagnet < 1) return false;
-    if (typeof data.level !== 'number' || data.level < 1) return false;
-    return true;
-}
 
 function loadSave() {
     try {
         const raw = localStorage.getItem(SAVE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            // Backward compatibility: fill defaults for missing upgrade attributes
             saveState = { ...DEFAULT_SAVE, ...parsed };
             if (!validateSave(saveState)) {
                 console.warn('[CrowdRunner] Corrupted save data — resetting to defaults.');
@@ -467,12 +443,6 @@ function loadSave() {
     updateShopUI();
 }
 function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(saveState)); updateShopUI(); }
-
-function getUpgradeCost(level, type) {
-    if (type === 'attack') return level * 15;
-    if (type === 'magnet') return level * 12;
-    return level * 10; // default for troops
-}
 
 function updateShopUI() {
     coinCountEl.innerText = saveState.coins;
@@ -498,6 +468,143 @@ function updateShopUI() {
     startLevelEl.innerText = saveState.level;
     if (startLevelEl2) startLevelEl2.innerText = saveState.level;
     currentLevelEl.innerText = saveState.level;
+
+    // --- Quest Progress UI ---
+    const qBar = document.getElementById('quest-progress-bar');
+    const qText = document.getElementById('quest-progress-text');
+    const qBadge = document.getElementById('quest-status-badge');
+    if (qBar && qText && qBadge) {
+        const progress = saveState.questProgress || 0;
+        qBar.style.width = Math.min(100, (progress / 15) * 100) + '%';
+        qText.textContent = `${progress}/15`;
+        if (saveState.questCompleted) {
+            qBadge.style.display = 'block';
+        } else {
+            qBadge.style.display = 'none';
+        }
+    }
+
+    // --- Sky Shop UI ---
+    const skyNebulaBtn = document.getElementById('buy-sky-nebula-btn');
+    if (skyNebulaBtn) {
+        const isUnlocked = saveState.unlockedSkies.includes('nebula');
+        if (!isUnlocked) {
+            skyNebulaBtn.innerText = "🪙 250";
+            skyNebulaBtn.className = "btn-shop";
+            skyNebulaBtn.disabled = saveState.coins < 250;
+        } else {
+            skyNebulaBtn.disabled = false;
+            if (saveState.selectedSky === 'nebula') {
+                skyNebulaBtn.innerText = "Equipped";
+                skyNebulaBtn.className = "btn-shop selected";
+            } else {
+                skyNebulaBtn.innerText = "Equip";
+                skyNebulaBtn.className = "btn-shop equip";
+            }
+        }
+    }
+
+    const skySupernovaBtn = document.getElementById('buy-sky-supernova-btn');
+    if (skySupernovaBtn) {
+        const isUnlocked = saveState.unlockedSkies.includes('supernova');
+        if (!isUnlocked) {
+            skySupernovaBtn.innerText = "🪙 400";
+            skySupernovaBtn.className = "btn-shop";
+            skySupernovaBtn.disabled = saveState.coins < 400;
+        } else {
+            skySupernovaBtn.disabled = false;
+            if (saveState.selectedSky === 'supernova') {
+                skySupernovaBtn.innerText = "Equipped";
+                skySupernovaBtn.className = "btn-shop selected";
+            } else {
+                skySupernovaBtn.innerText = "Equip";
+                skySupernovaBtn.className = "btn-shop equip";
+            }
+        }
+    }
+
+    // --- Space Objects Shop UI ---
+    const spacePlanetBtn = document.getElementById('buy-space-planet-btn');
+    if (spacePlanetBtn) {
+        const isUnlocked = saveState.unlockedSpaceObjects.includes('planet');
+        if (!isUnlocked) {
+            spacePlanetBtn.innerText = "$0.99";
+            spacePlanetBtn.className = "btn-shop";
+            spacePlanetBtn.disabled = false;
+        } else {
+            if (saveState.selectedSpaceObject === 'planet') {
+                spacePlanetBtn.innerText = "Equipped";
+                spacePlanetBtn.className = "btn-shop selected";
+            } else {
+                spacePlanetBtn.innerText = "Equip";
+                spacePlanetBtn.className = "btn-shop equip";
+            }
+        }
+    }
+
+    const spaceStationBtn = document.getElementById('buy-space-station-btn');
+    if (spaceStationBtn) {
+        const isUnlocked = saveState.unlockedSpaceObjects.includes('station');
+        if (!isUnlocked) {
+            spaceStationBtn.innerText = "$1.99";
+            spaceStationBtn.className = "btn-shop";
+            spaceStationBtn.disabled = false;
+        } else {
+            if (saveState.selectedSpaceObject === 'station') {
+                spaceStationBtn.innerText = "Equipped";
+                spaceStationBtn.className = "btn-shop selected";
+            } else {
+                spaceStationBtn.innerText = "Equip";
+                spaceStationBtn.className = "btn-shop equip";
+            }
+        }
+    }
+
+    // --- Decor Upgrades Shop UI ---
+    const decorTreesLvl = document.getElementById('decor-trees-lvl');
+    const buyDecorTreesBtn = document.getElementById('buy-decor-trees-btn');
+    if (decorTreesLvl && buyDecorTreesBtn) {
+        const lvl = saveState.decorTreesLvl || 0;
+        decorTreesLvl.textContent = lvl;
+        if (lvl >= 5) {
+            buyDecorTreesBtn.innerText = "Max";
+            buyDecorTreesBtn.disabled = true;
+        } else {
+            const cost = getUpgradeCost(lvl, 'decor_trees');
+            buyDecorTreesBtn.innerText = `🪙 ${cost}`;
+            buyDecorTreesBtn.disabled = saveState.coins < cost;
+        }
+    }
+
+    const decorPondsLvl = document.getElementById('decor-ponds-lvl');
+    const buyDecorPondsBtn = document.getElementById('buy-decor-ponds-btn');
+    if (decorPondsLvl && buyDecorPondsBtn) {
+        const lvl = saveState.decorPondsLvl || 0;
+        decorPondsLvl.textContent = lvl;
+        if (lvl >= 5) {
+            buyDecorPondsBtn.innerText = "Max";
+            buyDecorPondsBtn.disabled = true;
+        } else {
+            const cost = getUpgradeCost(lvl, 'decor_ponds');
+            buyDecorPondsBtn.innerText = `🪙 ${cost}`;
+            buyDecorPondsBtn.disabled = saveState.coins < cost;
+        }
+    }
+
+    const decorAnimalsLvl = document.getElementById('decor-animals-lvl');
+    const buyDecorAnimalsBtn = document.getElementById('buy-decor-animals-btn');
+    if (decorAnimalsLvl && buyDecorAnimalsBtn) {
+        const lvl = saveState.decorAnimalsLvl || 0;
+        decorAnimalsLvl.textContent = lvl;
+        if (lvl >= 5) {
+            buyDecorAnimalsBtn.innerText = "Max";
+            buyDecorAnimalsBtn.disabled = true;
+        } else {
+            const cost = getUpgradeCost(lvl, 'decor_animals');
+            buyDecorAnimalsBtn.innerText = `🪙 ${cost}`;
+            buyDecorAnimalsBtn.disabled = saveState.coins < cost;
+        }
+    }
 }
 // (buyTroopsBtn listener is registered at bottom of file to avoid duplicate)
 
@@ -784,6 +891,15 @@ treeConeMesh.castShadow = true; treeTrunkMesh.castShadow = true;
 scene.add(treeConeMesh); scene.add(treeTrunkMesh);
 let trees = [];
 
+// Cosmic Animals setup
+const MAX_ANIMALS = 100;
+const animalGeo = new THREE.BoxGeometry(0.8, 0.8, 1.2);
+const animalMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.8, metalness: 0.1 });
+const animalMesh = new THREE.InstancedMesh(animalGeo, animalMat, MAX_ANIMALS);
+animalMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(animalMesh);
+let animals = [];
+
 // Street Lights (Night Only)
 const MAX_STREETLIGHTS = 20;
 const lightPoleGeo = new THREE.CylinderGeometry(0.15, 0.15, 8, 8);
@@ -899,10 +1015,10 @@ for (let i = 0; i < MAX_PHYSICAL_LIGHTS; i++) {
 }
 
 function applyBiomeSettings() {
-    // Dynamic settings based on level (5-biome cycle)
-    const biomeCycle = ['utopia', 'wasteland', 'neon', 'tundra', 'lava'];
-    const timeCycle = ['day', 'night', 'night', 'day', 'night'];
-    const index = (saveState.level - 1) % 5;
+    // Dynamic settings based on level — FIX: was hardcoded to 5, now uses all biomes
+    const biomeCycle = ['utopia', 'wasteland', 'neon', 'tundra', 'lava', 'dune', 'crystal', 'void'];
+    const timeCycle = ['day', 'night', 'night', 'day', 'night', 'day', 'night', 'night'];
+    const index = (saveState.level - 1) % biomeCycle.length;
 
     currentBiome = biomeCycle[index];
     timeOfDay = timeCycle[index];
@@ -988,6 +1104,23 @@ function applyBiomeSettings() {
 
         celestialMat.color.setHex(0xaaccff); flareSprite.visible = false;
         starsMesh.visible = true; satsMesh.visible = true;
+    }
+
+    // --- Custom Sky Overrides ---
+    if (saveState.selectedSky === 'nebula') {
+        const skyTex = createSkyTexture('#0e0524', '#260c4a');
+        skyMat.map = skyTex; skyMat.needsUpdate = true;
+        scene.fog.color.setHex(0x0e0524); scene.fog.density = 0.0035;
+        hemiLight.color.setHex(0xa385ff); hemiLight.groundColor.setHex(0x190d3d); hemiLight.intensity = 1.2;
+        dirLight.color.setHex(0xff00ff); dirLight.intensity = 1.4;
+        starsMesh.visible = true;
+    } else if (saveState.selectedSky === 'supernova') {
+        const skyTex = createSkyTexture('#300202', '#6a1505');
+        skyMat.map = skyTex; skyMat.needsUpdate = true;
+        scene.fog.color.setHex(0x300202); scene.fog.density = 0.004;
+        hemiLight.color.setHex(0xff7744); hemiLight.groundColor.setHex(0x3d0b00); hemiLight.intensity = 1.3;
+        dirLight.color.setHex(0xffaa00); dirLight.intensity = 1.6;
+        starsMesh.visible = true;
     }
 
     if (currentBiome === 'utopia') {
@@ -1163,6 +1296,28 @@ function updateEnvironmentMeshes(dt, effectiveScrollSpeed) {
         streetLightPool[i].light.intensity = 0;
         streetLightPool[i].light.visible = false;
     }
+
+    // Hopping Animals
+    for (let i = 0; i < MAX_ANIMALS; i++) {
+        if (i < animals.length) {
+            let a = animals[i];
+            a.z += effectiveScrollSpeed * dt;
+            
+            // Hop animation using absolute sine of time
+            let hopY = Math.abs(Math.sin((performance.now() * 0.005) + a.animOffset)) * 1.5;
+            
+            dummy.position.set(a.x, hopY + 0.4, a.z); // 0.4 offset to ground
+            dummy.scale.set(1, 1, 1);
+            dummy.rotation.set(0, a.x > 0 ? -Math.PI / 2 : Math.PI / 2, 0); // face side
+            dummy.updateMatrix();
+            animalMesh.setMatrixAt(i, dummy.matrix);
+        } else {
+            dummy.scale.set(0, 0, 0);
+            dummy.updateMatrix();
+            animalMesh.setMatrixAt(i, dummy.matrix);
+        }
+    }
+    animalMesh.instanceMatrix.needsUpdate = true;
 }
 
 function spawnEnvironmentObjects() {
@@ -1186,7 +1341,8 @@ function spawnEnvironmentObjects() {
     }
 
     // Lakes / Dumps
-    if (lakes.length < MAX_LAKES && Math.random() < 0.04) {
+    const pondSpawnChance = 0.04 * (1 + (saveState.decorPondsLvl || 0) * 0.4);
+    if (lakes.length < MAX_LAKES && Math.random() < pondSpawnChance) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 50 + 45);
         let w = Math.random() * 50 + 25;
@@ -1204,7 +1360,8 @@ function spawnEnvironmentObjects() {
     }
 
     // Trees (Forest along road borders)
-    if (trees.length < MAX_TREES && Math.random() < 0.3) {
+    const treeSpawnChance = 0.3 * (1 + (saveState.decorTreesLvl || 0) * 0.3);
+    if (trees.length < MAX_TREES && Math.random() < treeSpawnChance) {
         let isLeft = Math.random() > 0.5;
         let x = (isLeft ? -1 : 1) * (Math.random() * 15 + 23); // Just outside road edges (road is 40 wide)
         trees.push({ x: x, z: spawnZ });
@@ -1215,6 +1372,13 @@ function spawnEnvironmentObjects() {
         let isLeft = Math.random() > 0.5;
         let x = isLeft ? -20.5 : 20.5;
         streetLights.push({ x: x, z: spawnZ });
+    }
+
+    // Hopping Animals
+    if ((saveState.decorAnimalsLvl || 0) > 0 && animals.length < MAX_ANIMALS && Math.random() < 0.05 * saveState.decorAnimalsLvl) {
+        let isLeft = Math.random() > 0.5;
+        let x = (isLeft ? -1 : 1) * (Math.random() * 15 + 23);
+        animals.push({ x: x, z: spawnZ, animOffset: Math.random() * 10 });
     }
 }
 
@@ -1256,6 +1420,7 @@ const headGeo = new THREE.SphereGeometry(0.4, 8, 8);
 const bodyGeo = new THREE.BoxGeometry(0.6, 0.8, 0.4);
 const armGeo = new THREE.BoxGeometry(0.25, 0.55, 0.25);
 const legGeo = new THREE.BoxGeometry(0.25, 0.55, 0.25);
+const weaponGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6);
 
 // Self-illuminating materials — troops and enemies glow in the dark at night biomes
 const troopMaterial = new THREE.MeshPhysicalMaterial({
@@ -1271,6 +1436,7 @@ const bossMaterial = new THREE.MeshPhysicalMaterial({
     color: 0xff0000, metalness: 0.5, roughness: 0.2, clearcoat: 1.0,
     emissive: new THREE.Color(0xff0000), emissiveIntensity: 1.2   // very strong boss glow
 });
+const weaponMatT = new THREE.MeshBasicMaterial({ color: 0x00ffff });
 
 // We split meshes by alliance (Troops vs Enemies/Boss) to give them high-quality custom textures and glossiness
 const headMeshT = new THREE.InstancedMesh(headGeo, troopMaterial, MAX_HUMANS);
@@ -1279,6 +1445,7 @@ const lArmMeshT = new THREE.InstancedMesh(armGeo, troopMaterial, MAX_HUMANS);
 const rArmMeshT = new THREE.InstancedMesh(armGeo, troopMaterial, MAX_HUMANS);
 const lLegMeshT = new THREE.InstancedMesh(legGeo, troopMaterial, MAX_HUMANS);
 const rLegMeshT = new THREE.InstancedMesh(legGeo, troopMaterial, MAX_HUMANS);
+const weaponMeshT = new THREE.InstancedMesh(weaponGeo, weaponMatT, MAX_HUMANS);
 
 const headMeshE = new THREE.InstancedMesh(headGeo, enemyMaterial, MAX_HUMANS);
 const bodyMeshE = new THREE.InstancedMesh(bodyGeo, enemyMaterial, MAX_HUMANS);
@@ -1297,6 +1464,9 @@ allMeshes.forEach(m => {
     m.castShadow = true; m.receiveShadow = true;
     scene.add(m);
 });
+
+weaponMeshT.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(weaponMeshT);
 
 let troops = []; let enemies = []; let playerCenterX = 0; let finishLineSpawned = false; let finishLineMesh = null;
 
@@ -1347,6 +1517,18 @@ function updateHumanoidMeshes() {
         dummy.position.set(-0.15, 0.25, 0); dummy.rotation.set(-legRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[4].setMatrixAt(idx, dummy.matrixWorld); meshes[4].setColorAt(idx, color); baseObj.remove(dummy);
         dummy.position.set(0.15, 0.25, 0); dummy.rotation.set(legRot, 0, 0); baseObj.add(dummy); baseObj.updateMatrixWorld(true); meshes[5].setMatrixAt(idx, dummy.matrixWorld); meshes[5].setColorAt(idx, color); baseObj.remove(dummy);
 
+        if (!isEnemy && saveState.questCompleted) {
+            const armY = 0.6 - 0.275 * Math.cos(-armRot);
+            const armZ = -0.275 * Math.sin(-armRot);
+            dummy.position.set(0.35, armY, armZ - 0.3); // offset forward
+            dummy.rotation.set(-armRot - Math.PI/3, 0, 0); // point forward/upward
+            baseObj.add(dummy);
+            baseObj.updateMatrixWorld(true);
+            weaponMeshT.setMatrixAt(idx, dummy.matrixWorld);
+            weaponMeshT.setColorAt(idx, new THREE.Color(selectedSkin === 'plasma' ? 0xff00ff : 0x00ffff));
+            baseObj.remove(dummy);
+        }
+
         if (isEnemy) eIdx++; else tIdx++;
     }
 
@@ -1359,6 +1541,7 @@ function updateHumanoidMeshes() {
         headMeshT.setMatrixAt(i, dummy.matrixWorld); bodyMeshT.setMatrixAt(i, dummy.matrixWorld);
         lArmMeshT.setMatrixAt(i, dummy.matrixWorld); rArmMeshT.setMatrixAt(i, dummy.matrixWorld);
         lLegMeshT.setMatrixAt(i, dummy.matrixWorld); rLegMeshT.setMatrixAt(i, dummy.matrixWorld);
+        weaponMeshT.setMatrixAt(i, dummy.matrixWorld);
     }
     for (let i = eIdx; i < MAX_HUMANS; i++) {
         headMeshE.setMatrixAt(i, dummy.matrixWorld); bodyMeshE.setMatrixAt(i, dummy.matrixWorld);
@@ -1370,6 +1553,9 @@ function updateHumanoidMeshes() {
         m.instanceMatrix.needsUpdate = true;
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
     });
+    weaponMeshT.instanceMatrix.needsUpdate = true;
+    if (weaponMeshT.instanceColor) weaponMeshT.instanceColor.needsUpdate = true;
+    
     troopCountEl.innerText = troops.length;
 }
 
@@ -1749,7 +1935,8 @@ function triggerChromaFlash() {
 }
 
 function updateCoinsMesh(dt, effectiveScrollSpeed) {
-    const dummy = new THREE.Object3D();
+    if (!updateCoinsMesh._dummy) updateCoinsMesh._dummy = new THREE.Object3D();
+    const dummy = updateCoinsMesh._dummy;
     for (let i = 0; i < MAX_COINS; i++) {
         if (i < coinsList.length) {
             let c = coinsList[i]; c.rot += dt * 3;
@@ -1842,7 +2029,7 @@ function initGame() {
     }); gates = []; textSprites.forEach(t => scene.remove(t.sprite)); textSprites = [];
     if (finishLineMesh) { scene.remove(finishLineMesh); finishLineMesh = null; }
     enemies = []; particles = []; coinsList = [];
-    buildings = []; lakes = []; mountains = []; trees = []; streetLights = [];
+    buildings = []; lakes = []; mountains = []; trees = []; streetLights = []; animals = [];
     if (typeof streetLightPool !== 'undefined') {
         streetLightPool.forEach(p => { p.light.intensity = 0; p.light.visible = false; });
     }
@@ -2020,8 +2207,10 @@ function updateGame(dt) {
                 t.x += (t.targetEnemy.x + (Math.random() - 0.5) * 2 - t.x) * 5 * dt; t.z += (t.targetEnemy.z + (Math.random() - 0.5) * 2 - t.z) * 5 * dt;
                 t.fightTimer += dt;
                 if (t.fightTimer > TROOP_FIGHT_INTERVAL) {
-                    t.fightTimer = 0;
                     let dmg = 1 + (saveState.upgradeAttack - 1) * 0.5;
+                    if (saveState.questCompleted) {
+                        dmg += 1.0; // Weapon damage boost
+                    }
                     t.targetEnemy.hp -= dmg;
                     t.targetEnemy.flashTimer = 0.12;
 
@@ -2237,6 +2426,30 @@ function updateGame(dt) {
                 activePowerups.magnetTimer = 6.0;
                 spawnFloatingText(p.mesh.position.x, 3, p.mesh.position.z, "COIN MAGNET!", "#ff00ff");
             }
+
+            // Quest progression for shield and magnet
+            if (p.type === 'shield' || p.type === 'magnet') {
+                if (!saveState.questCompleted) {
+                    saveState.questProgress = (saveState.questProgress || 0) + 1;
+                    if (saveState.questProgress >= 15) {
+                        saveState.questCompleted = true;
+                        saveState.questProgress = 15;
+                        try {
+                            const skinsRaw = localStorage.getItem('crowdRunnerSkins');
+                            let skins = skinsRaw ? JSON.parse(skinsRaw) : { unlocked: ['cyan'], selected: 'cyan' };
+                            if (!skins.unlocked.includes('plasma')) {
+                                skins.unlocked.push('plasma');
+                                localStorage.setItem('crowdRunnerSkins', JSON.stringify(skins));
+                            }
+                        } catch (e) {}
+                        spawnFloatingText(p.mesh.position.x, 5, p.mesh.position.z, "⚡ LASER SWORDS UNLOCKED! ⚡", "#ff00ff", 5);
+                    } else {
+                        spawnFloatingText(p.mesh.position.x, 4, p.mesh.position.z, `QUEST: ${saveState.questProgress}/15`, "#00e5ff", 3);
+                    }
+                    saveGame();
+                    updateShopUI();
+                }
+            }
         }
     });
 
@@ -2285,7 +2498,7 @@ function updateGame(dt) {
 
     enemies = enemies.filter(e => e.z <= 20 && !e.dead);
     coinsList = coinsList.filter(c => !c.collected && c.z <= 30);
-    buildings = buildings.filter(b => b.z <= 100); lakes = lakes.filter(l => l.z <= 100); mountains = mountains.filter(m => m.z <= 100); trees = trees.filter(t => t.z <= 100);
+    buildings = buildings.filter(b => b.z <= 100); lakes = lakes.filter(l => l.z <= 100); mountains = mountains.filter(m => m.z <= 100); trees = trees.filter(t => t.z <= 100); animals = animals.filter(a => a.z <= 100);
     streetLights = streetLights.filter(s => s.z <= 10); // Despawn early — beam cones invade camera past z=10
 
     updateHumanoidMeshes();
@@ -2360,7 +2573,6 @@ function updateGame(dt) {
     // 7. Per-biome bloom tuning
     if (Math.floor(biomeTime * 60) % 60 === 0) {
         if (timeOfDay === 'night') {
-            // Night: lower threshold so troop/enemy emissive halos bloom more
             if (currentBiome === 'neon' || currentBiome === 'lava') {
                 bloomPass.strength = 1.6; bloomPass.threshold = 0.60;
             } else if (currentBiome === 'wasteland') {
@@ -2369,7 +2581,6 @@ function updateGame(dt) {
                 bloomPass.strength = 1.0; bloomPass.threshold = 0.70;
             }
         } else {
-            // Day: conservative bloom
             if (currentBiome === 'utopia') {
                 bloomPass.strength = 0.5; bloomPass.threshold = 0.90;
             } else {
@@ -2377,33 +2588,598 @@ function updateGame(dt) {
             }
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PHASE 2-5: REALISM UPGRADES — Galaxy, Space Creature, Water, Weather
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ─── Galaxy / Nebula System ───────────────────────────────────────────────
+    if (typeof updateGalaxy === 'function') updateGalaxy(dt);
+    updateCustomSpaceObject(dt);
+
+    // ─── Giant Space Creature ────────────────────────────────────────────────
+    if (typeof updateSpaceCreature === 'function') updateSpaceCreature(dt, effectiveScrollSpeed);
+
+    // ─── Volumetric Cloud Layer ──────────────────────────────────────────────
+    if (typeof updateClouds === 'function') updateClouds(dt);
+
+    // ─── Weather System ──────────────────────────────────────────────────────
+    if (typeof updateWeather === 'function') updateWeather(dt);
+
+    // ─── Tree Wind Sway Animation ────────────────────────────────────────────
+    if (typeof updateTreeWind === 'function') updateTreeWind(dt);
 }
 
-function animate(timestamp) {
-    requestAnimationFrame(animate);
-    timer.update(timestamp);
-    const dt = Math.min(timer.getDelta(), 0.1);
-    updateGame(dt);
-    composer.render();
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 2: GALAXY & NEBULA SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Galaxy spiral sprite — a large billboard with a procedural galaxy texture
+function createGalaxyTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Radial gradient background (deep space)
+    const bg = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+    bg.addColorStop(0, 'rgba(0,0,0,0)');
+    bg.addColorStop(0.3, 'rgba(10,5,30,0.3)');
+    bg.addColorStop(0.6, 'rgba(30,10,60,0.5)');
+    bg.addColorStop(0.8, 'rgba(60,20,100,0.4)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Spiral arms using particles
+    for (let i = 0; i < 3000; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * 200 + 20;
+        const armOffset = Math.sin(radius * 0.05) * 0.8;
+        const spiralAngle = angle + radius * 0.02 + armOffset;
+        const x = 256 + Math.cos(spiralAngle) * radius;
+        const y = 256 + Math.sin(spiralAngle) * radius;
+        const dist = Math.sqrt((x - 256) ** 2 + (y - 256) ** 2);
+        const alpha = Math.max(0, 1 - dist / 280) * (0.3 + Math.random() * 0.5);
+        const hue = 240 + Math.random() * 60 + (dist > 100 ? 20 : -20);
+        ctx.fillStyle = `hsla(${hue}, 80%, ${50 + Math.random() * 30}%, ${alpha})`;
+        ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+let galaxySprite = null;
+let galaxyTime = 0;
+
+function initGalaxy() {
+    if (galaxySprite) return;
+    const tex = createGalaxyTexture();
+    const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    galaxySprite = new THREE.Sprite(mat);
+    galaxySprite.position.set(0, 200, -550);
+    galaxySprite.scale.set(350, 250, 1);
+    scene.add(galaxySprite);
+}
+
+function updateGalaxy(dt) {
+    galaxyTime += dt * 0.008;
+    if (!galaxySprite) initGalaxy();
+    if (timeOfDay === 'night') {
+        galaxySprite.visible = true;
+        galaxySprite.material.opacity = 0.5 + Math.sin(galaxyTime * 0.5) * 0.15;
+        galaxySprite.position.y = 200 + Math.sin(galaxyTime * 0.3) * 15;
+    } else {
+        galaxySprite.visible = false;
+    }
+}
+
+// ─── Custom 3D Space Objects System ──────────────────────────────────────────
+let customSpaceObject = null;
+
+function updateCustomSpaceObject(dt) {
+    const selected = saveState.selectedSpaceObject || 'none';
+    
+    // If we need to recreate or destroy
+    if (customSpaceObject && customSpaceObject.userData.type !== selected) {
+        scene.remove(customSpaceObject);
+        customSpaceObject = null;
+    }
+    
+    if (selected === 'none') return;
+    
+    if (!customSpaceObject) {
+        const group = new THREE.Group();
+        group.userData = { type: selected };
+        
+        if (selected === 'planet') {
+            // Giant Ringed Planet: Sphere + Torus ring
+            const planetGeo = new THREE.SphereGeometry(45, 32, 32);
+            const planetMat = new THREE.MeshStandardMaterial({
+                color: 0xe69d5e,
+                roughness: 0.8,
+                metalness: 0.1,
+                emissive: 0x5a2d0c,
+                emissiveIntensity: 0.3
+            });
+            const planet = new THREE.Mesh(planetGeo, planetMat);
+            group.add(planet);
+            
+            // Ring
+            const ringGeo = new THREE.TorusGeometry(75, 4, 2, 40);
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: 0xd4a373,
+                roughness: 0.9,
+                transparent: true,
+                opacity: 0.75
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2.3;
+            ring.rotation.y = Math.PI / 8;
+            ring.scale.set(1, 1, 0.05); // flatten it
+            group.add(ring);
+            
+            // Place far in sky
+            group.position.set(240, 160, -600);
+        } else if (selected === 'station') {
+            // Orbiting Space Station: Cylinder hub + large ring
+            const stationHubGeo = new THREE.CylinderGeometry(5, 5, 25, 12);
+            const stationMat = new THREE.MeshStandardMaterial({
+                color: 0xdddddd,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+            const hub = new THREE.Mesh(stationHubGeo, stationMat);
+            group.add(hub);
+            
+            // Solar panels (flat boxes)
+            const panelGeo = new THREE.BoxGeometry(40, 0.2, 8);
+            const panelMat = new THREE.MeshStandardMaterial({ color: 0x004488, emissive: 0x002244, emissiveIntensity: 0.5 });
+            const panelsL = new THREE.Mesh(panelGeo, panelMat);
+            panelsL.position.set(25, 0, 0);
+            group.add(panelsL);
+            const panelsR = new THREE.Mesh(panelGeo, panelMat);
+            panelsR.position.set(-25, 0, 0);
+            group.add(panelsR);
+            
+            // Place in sky
+            group.position.set(-180, 180, -500);
+        }
+        
+        scene.add(group);
+        customSpaceObject = group;
+    }
+    
+    // Update space object animation
+    if (customSpaceObject) {
+        if (selected === 'planet') {
+            customSpaceObject.rotation.y += dt * 0.02;
+        } else if (selected === 'station') {
+            customSpaceObject.rotation.y += dt * 0.08;
+            customSpaceObject.rotation.x += dt * 0.03;
+        }
+        // Slow parallax floating
+        customSpaceObject.position.y += Math.sin(performance.now() * 0.0004) * 0.02;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 2: GIANT SPACE CREATURE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A massive creature that swims across the sky — biome themed
+const SPACE_CREATURE_BIOME_TYPES = {
+    utopia: { color: 0x88ddff, glow: 0x00aaff, name: 'Cosmic Whale' },
+    wasteland: { color: 0xff6633, glow: 0xff2200, name: 'Fire Wyrm' },
+    neon: { color: 0xff00ff, glow: 0x8800ff, name: 'Neon Serpent' },
+    tundra: { color: 0xccddff, glow: 0x88aaff, name: 'Ice Dragon' },
+    lava: { color: 0xff4400, glow: 0xff8800, name: 'Magma Leviathan' },
+    dune: { color: 0xffaa00, glow: 0xffcc44, name: 'Sand Kraken' },
+    crystal: { color: 0xaa44ff, glow: 0x8800ff, name: 'Prismatic Drake' },
+    void: { color: 0x4400aa, glow: 0x6600ff, name: 'Abyssal Horror' }
+};
+
+let spaceCreature = null;
+let spaceCreatureTimer = 0;
+let spaceCreatureActive = false;
+let creatureCrossDuration = 20; // seconds to cross the sky
+
+function initSpaceCreature() {
+    if (spaceCreature) {
+        scene.remove(spaceCreature.group);
+        spaceCreature = null;
+    }
+
+    const info = SPACE_CREATURE_BIOME_TYPES[currentBiome] || SPACE_CREATURE_BIOME_TYPES.utopia;
+
+    const group = new THREE.Group();
+
+    // Main body — elongated ellipsoid
+    const bodyGeo = new THREE.SphereGeometry(1, 12, 8);
+    const bodyMat = new THREE.MeshPhysicalMaterial({
+        color: info.color, metalness: 0.3, roughness: 0.6,
+        emissive: info.glow, emissiveIntensity: 0.5,
+        clearcoat: 1.0, clearcoatRoughness: 0.2
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.scale.set(5, 1.2, 1.8);
+    group.add(body);
+
+    // Tail — cone
+    const tailGeo = new THREE.ConeGeometry(0.8, 3, 6);
+    const tailMat = new THREE.MeshPhysicalMaterial({
+        color: info.color, emissive: info.glow, emissiveIntensity: 0.3,
+        metalness: 0.2, roughness: 0.7
+    });
+    const tail = new THREE.Mesh(tailGeo, tailMat);
+    tail.position.set(-3.5, 0, 0);
+    tail.rotation.z = 0.3;
+    group.add(tail);
+
+    // Wings / fins (two side planes)
+    const wingGeo = new THREE.PlaneGeometry(2.5, 1.5);
+    const wingMat = new THREE.MeshPhysicalMaterial({
+        color: info.color, transparent: true, opacity: 0.7, side: THREE.DoubleSide,
+        emissive: info.glow, emissiveIntensity: 0.3,
+        metalness: 0.1, roughness: 0.8
+    });
+    const wingL = new THREE.Mesh(wingGeo, wingMat);
+    wingL.position.set(0.5, 0, 1.8);
+    wingL.rotation.x = -0.4;
+    group.add(wingL);
+    const wingR = new THREE.Mesh(wingGeo, wingMat);
+    wingR.position.set(0.5, 0, -1.8);
+    wingR.rotation.x = 0.4;
+    group.add(wingR);
+
+    // Eye glow
+    const eyeGeo = new THREE.SphereGeometry(0.3, 8, 8);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(2.2, 0.3, 0.5);
+    group.add(eye);
+    const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+    eye2.position.set(2.2, 0.3, -0.5);
+    group.add(eye2);
+
+    // Glow aura sprite
+    const glowTex = createGlowTexture(info.glow);
+    const auraMat = new THREE.SpriteMaterial({
+        map: glowTex, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const aura = new THREE.Sprite(auraMat);
+    aura.scale.set(12, 8, 1);
+    group.add(aura);
+
+    // Start position — far left, high up
+    group.position.set(-450, 180 + Math.random() * 40, -300 + Math.random() * 100);
+    group.scale.setScalar(1.5 + Math.random() * 0.5);
+
+    group.userData = {
+        phase: Math.random() * Math.PI * 2,
+        wingPhase: 0,
+        trailTimer: 0
+    };
+
+    scene.add(group);
+    spaceCreature = group;
+    spaceCreatureActive = true;
+}
+
+function updateSpaceCreature(dt, scrollSpeed) {
+    spaceCreatureTimer += dt;
+
+    // Only show at night, and not every level
+    if (timeOfDay !== 'night') {
+        if (spaceCreature && spaceCreature.visible) spaceCreature.visible = false;
+        return;
+    }
+
+    // Init creature if needed
+    if (!spaceCreature) initSpaceCreature();
+
+    if (!spaceCreature) return;
+    spaceCreature.visible = true;
+
+    const data = spaceCreature.userData;
+    data.wingPhase += dt * 2.5;
+
+    // Move creature across the sky (parallax: slower than scroll speed)
+    spaceCreature.position.x += (scrollSpeed * 0.08 + 5) * dt;
+
+    // Slight vertical undulation
+    data.phase += dt * 0.7;
+    spaceCreature.position.y += Math.sin(data.phase) * 0.3;
+
+    // Bob rotation
+    spaceCreature.rotation.z = Math.sin(data.phase * 0.5) * 0.05;
+    spaceCreature.rotation.y = Math.sin(data.phase * 0.3) * 0.1;
+
+    // Wing flap animation (scale wings)
+    const wingPhase = Math.sin(data.wingPhase) * 0.3;
+    if (spaceCreature.children.length > 2) {
+        const wL = spaceCreature.children[2];
+        const wR = spaceCreature.children[3];
+        if (wL && wL.isMesh) {
+            wL.rotation.x = -0.4 + wingPhase;
+            wR.rotation.x = 0.4 - wingPhase;
+        }
+    }
+
+    // Particle trail
+    data.trailTimer += dt;
+    if (data.trailTimer > 0.15 && Math.random() < 0.4) {
+        data.trailTimer = 0;
+        const tx = spaceCreature.position.x + (Math.random() - 0.5) * 3;
+        const ty = spaceCreature.position.y + (Math.random() - 0.5) * 2;
+        const tz = spaceCreature.position.z + (Math.random() - 0.5) * 3;
+        spawnParticles(tx, ty, tz, 0x88ccff, 2, 4);
+    }
+
+    // Reset creature when it goes off screen
+    if (spaceCreature.position.x > 500) {
+        spaceCreatureActive = false;
+        scene.remove(spaceCreature);
+        spaceCreature = null;
+        spaceCreatureTimer = 0;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3: ENHANCED WATER (Reflective Ponds)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// We upgrade the lakes mesh to use a reflective material where possible
+// For performance, we use a simple animated vertex color approach on the existing lakes
+
+function upgradeLakesReflection() {
+    // The existing lakesMesh already uses a semi-transparent blue material.
+    // We enhance it with an animated wave effect via the material's emissive
+    // and add a ring of greenery sprites around lakes in the spawn function.
+}
+
+// ─── Pond Vegetation Ring ──────────────────────────────────────────────────
+const MAX_VEGETATION = 200;
+const vegGeo = new THREE.PlaneGeometry(0.5, 0.8);
+const vegMat = new THREE.MeshBasicMaterial({
+    color: 0x33aa44, transparent: true, opacity: 0.8,
+    side: THREE.DoubleSide, depthWrite: true
+});
+const vegMesh = new THREE.InstancedMesh(vegGeo, vegMat, MAX_VEGETATION);
+vegMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(vegMesh);
+let vegetation = [];
+let vegDummy = new THREE.Object3D();
+
+function spawnVegetationAroundLake(lakeX, lakeZ, lakeW, lakeD) {
+    const count = Math.floor(Math.random() * 15 + 5);
+    for (let i = 0; i < count; i++) {
+        if (vegetation.length >= MAX_VEGETATION) break;
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.max(lakeW, lakeD) * 0.5 + 2 + Math.random() * 4;
+        vegDummy = new THREE.Object3D();
+        vegetation.push({
+            x: lakeX + Math.cos(angle) * radius,
+            z: lakeZ + Math.sin(angle) * radius,
+            rot: Math.random() * Math.PI * 2,
+            scale: 0.5 + Math.random() * 0.8,
+            swayOffset: Math.random() * 10
+        });
+    }
+}
+
+function updateVegetation(dt, effectiveScrollSpeed) {
+    const dummy = vegDummy || new THREE.Object3D();
+    for (let i = 0; i < MAX_VEGETATION; i++) {
+        if (i < vegetation.length) {
+            const v = vegetation[i];
+            v.z += effectiveScrollSpeed * dt;
+            const sway = Math.sin(biomeTime * 2 + v.swayOffset) * 0.15;
+            dummy.position.set(v.x, 0.2, v.z);
+            dummy.scale.set(v.scale, v.scale, 1);
+            dummy.rotation.set(0, v.rot, sway);
+            dummy.updateMatrix();
+            vegMesh.setMatrixAt(i, dummy.matrix);
+        } else {
+            dummy.scale.set(0, 0, 0);
+            dummy.updateMatrix();
+            vegMesh.setMatrixAt(i, dummy.matrix);
+        }
+    }
+    vegMesh.instanceMatrix.needsUpdate = true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4: VOLUMETRIC CLOUDS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_CLOUDS = 60;
+const cloudGeo = new THREE.SphereGeometry(1, 6, 6);
+const cloudMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.5,
+    roughness: 0.9, metalness: 0.0
+});
+const cloudMesh = new THREE.InstancedMesh(cloudGeo, cloudMat, MAX_CLOUDS);
+cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(cloudMesh);
+let clouds = [];
+let cloudDummy = new THREE.Object3D();
+
+function spawnCloud() {
+    if (clouds.length >= MAX_CLOUDS) return;
+    cloudDummy = new THREE.Object3D();
+    const h = Math.random() * 40 + 80;
+    clouds.push({
+        x: (Math.random() - 0.5) * 800,
+        y: h,
+        z: -500 - Math.random() * 200,
+        scale: 10 + Math.random() * 25,
+        speed: 2 + Math.random() * 5,
+        phase: Math.random() * Math.PI * 2
+    });
+}
+
+function updateClouds(dt) {
+    if (timeOfDay === 'day' && clouds.length < MAX_CLOUDS && Math.random() < 0.02) spawnCloud();
+
+    const dummy = cloudDummy || new THREE.Object3D();
+    for (let i = 0; i < MAX_CLOUDS; i++) {
+        if (i < clouds.length) {
+            const c = clouds[i];
+            c.x += c.speed * dt;
+            c.z += 2 * dt;
+            if (c.x > 500) c.x = -500;
+            if (c.z > 200) c.z = -600;
+
+            const sc = c.scale;
+            dummy.position.set(c.x, c.y + Math.sin(biomeTime * 0.3 + c.phase) * 3, c.z);
+            dummy.scale.set(sc, sc * 0.4, sc * 0.6);
+            dummy.updateMatrix();
+            cloudMesh.setMatrixAt(i, dummy.matrix);
+            cloudMesh.setColorAt(i, new THREE.Color(timeOfDay === 'day' ? 0xffffff : 0x444466));
+        } else {
+            dummy.scale.set(0, 0, 0);
+            dummy.updateMatrix();
+            cloudMesh.setMatrixAt(i, dummy.matrix);
+        }
+    }
+    cloudMesh.instanceMatrix.needsUpdate = true;
+    if (cloudMesh.instanceColor) cloudMesh.instanceColor.needsUpdate = true;
+    clouds = clouds.filter(c => c.z < 200);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 5: WEATHER SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_RAIN = 800;
+const rainGeo = new THREE.BufferGeometry();
+const rainPositions = new Float32Array(MAX_RAIN * 3);
+for (let i = 0; i < MAX_RAIN; i++) {
+    rainPositions[i * 3] = (Math.random() - 0.5) * 50;
+    rainPositions[i * 3 + 1] = Math.random() * 30;
+    rainPositions[i * 3 + 2] = -Math.random() * 60 - 10;
+}
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+const rainMat = new THREE.PointsMaterial({
+    color: 0xaaccff, size: 0.08, transparent: true, opacity: 0.6,
+    blending: THREE.AdditiveBlending, depthWrite: false
+});
+const rainSystem = new THREE.Points(rainGeo, rainMat);
+rainSystem.visible = false;
+scene.add(rainSystem);
+
+const MAX_SNOW = 500;
+const snowGeo = new THREE.BufferGeometry();
+const snowPositions = new Float32Array(MAX_SNOW * 3);
+for (let i = 0; i < MAX_SNOW; i++) {
+    snowPositions[i * 3] = (Math.random() - 0.5) * 60;
+    snowPositions[i * 3 + 1] = Math.random() * 25;
+    snowPositions[i * 3 + 2] = -Math.random() * 50 - 10;
+}
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+const snowMat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.15, transparent: true, opacity: 0.7,
+    blending: THREE.AdditiveBlending, depthWrite: false
+});
+const snowSystem = new THREE.Points(snowGeo, snowMat);
+snowSystem.visible = false;
+scene.add(snowSystem);
+
+// Ash particles for lava/wasteland
+const MAX_ASH = 300;
+const ashGeo = new THREE.BufferGeometry();
+const ashPositions = new Float32Array(MAX_ASH * 3);
+for (let i = 0; i < MAX_ASH; i++) {
+    ashPositions[i * 3] = (Math.random() - 0.5) * 60;
+    ashPositions[i * 3 + 1] = Math.random() * 20;
+    ashPositions[i * 3 + 2] = -Math.random() * 50 - 10;
+}
+ashGeo.setAttribute('position', new THREE.BufferAttribute(ashPositions, 3));
+const ashMat = new THREE.PointsMaterial({
+    color: 0x444444, size: 0.12, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false
+});
+const ashSystem = new THREE.Points(ashGeo, ashMat);
+ashSystem.visible = false;
+scene.add(ashSystem);
+
+function updateWeather(dt) {
+    // Rain for neon city (always night)
+    if (currentBiome === 'neon') {
+        rainSystem.visible = true;
+        rainSystem.material.opacity = 0.5 + Math.sin(biomeTime * 0.5) * 0.1;
+        const pos = rainSystem.geometry.attributes.position;
+        for (let i = 0; i < MAX_RAIN; i++) {
+            pos.array[i * 3 + 1] -= 15 * dt;
+            pos.array[i * 3] += Math.sin(biomeTime + i) * 0.5 * dt;
+            if (pos.array[i * 3 + 1] < -2) {
+                pos.array[i * 3 + 1] = 25 + Math.random() * 5;
+                pos.array[i * 3] = (Math.random() - 0.5) * 50;
+                pos.array[i * 3 + 2] = -Math.random() * 60 - 10;
+            }
+        }
+        pos.needsUpdate = true;
+        snowSystem.visible = false;
+        ashSystem.visible = false;
+    }
+    // Snow for tundra
+    else if (currentBiome === 'tundra') {
+        snowSystem.visible = true;
+        const spos = snowSystem.geometry.attributes.position;
+        for (let i = 0; i < MAX_SNOW; i++) {
+            spos.array[i * 3 + 1] -= 4 * dt;
+            spos.array[i * 3] += Math.sin(biomeTime * 0.7 + i * 0.1) * 1.5 * dt;
+            if (spos.array[i * 3 + 1] < -2) {
+                spos.array[i * 3 + 1] = 22 + Math.random() * 3;
+                spos.array[i * 3] = (Math.random() - 0.5) * 60;
+                spos.array[i * 3 + 2] = -Math.random() * 50 - 10;
+            }
+        }
+        spos.needsUpdate = true;
+        rainSystem.visible = false;
+        ashSystem.visible = false;
+    }
+    // Ash for wasteland / lava
+    else if (currentBiome === 'wasteland' || currentBiome === 'lava') {
+        ashSystem.visible = true;
+        const apos = ashSystem.geometry.attributes.position;
+        for (let i = 0; i < MAX_ASH; i++) {
+            apos.array[i * 3 + 1] -= 8 * dt;
+            apos.array[i * 3] += Math.sin(biomeTime + i * 0.3) * 2 * dt;
+            if (apos.array[i * 3 + 1] < -2) {
+                apos.array[i * 3 + 1] = 18 + Math.random() * 2;
+                apos.array[i * 3] = (Math.random() - 0.5) * 60;
+                apos.array[i * 3 + 2] = -Math.random() * 50 - 10;
+            }
+        }
+        apos.needsUpdate = true;
+        rainSystem.visible = false;
+        snowSystem.visible = false;
+    }
+    // Clear weather for others
+    else {
+        rainSystem.visible = false;
+        snowSystem.visible = false;
+        ashSystem.visible = false;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3: TREE WIND SWAY & IMPROVED FOLIAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function updateTreeWind(dt) {
+    // Apply wind-induced color variation to existing tree materials
+    const wind = Math.sin(biomeTime * 1.5) * 0.05 + 0.95;
+    // Subtle brightness oscillation simulates wind through leaves
+    treeConeMat.color.multiplyScalar(1 + (wind - 0.95) * 0.01);
+    treeConeMat.needsUpdate = true;
 }
 
 // ─── Level Intro Countdown ───────────────────────────────────────────────────
-const BIOME_INFO = [
-    { name: 'Utopia Day', badge: 'UTOPIA', accent: '#00e5ff', desc: 'Build your army through the golden city gates.', nextName: 'Wasteland Night' },
-    { name: 'Wasteland Night', badge: 'WASTELAND', accent: '#ff4422', desc: 'Survive the ruins. The enemies are stronger here.', nextName: 'Neon City Night' },
-    { name: 'Neon City Night', badge: 'NEON CITY', accent: '#ff00ff', desc: 'Slick cyberpunk speedway. Watch your corners.', nextName: 'Arctic Tundra' },
-    { name: 'Arctic Tundra', badge: 'TUNDRA', accent: '#aaddff', desc: 'Battle through freezing snow and icy winds.', nextName: 'Lava Fields' },
-    { name: 'Lava Fields', badge: 'LAVA FIELDS', accent: '#ff4500', desc: 'Avoid boiling lava pools and ash clouds.', nextName: 'Dune Desert' },
-    { name: 'Dune Desert', badge: 'DUNE', accent: '#ffaa00', desc: 'Scorchingly hot sands. Burst gates appear here.', nextName: 'Crystal Caves' },
-    { name: 'Crystal Caves', badge: 'CRYSTAL', accent: '#aa00ff', desc: 'Prismatic tunnels. Shards grant random multipliers.', nextName: 'Void Abyss' },
-    { name: 'Void Abyss', badge: 'VOID', accent: '#8800ff', desc: 'Reality warps. Expect the impossible.', nextName: 'Utopia Day' }
-];
-
-function getBiomeInfo(level) {
-    // Cycle through 5 biomes
-    return BIOME_INFO[(level - 1) % 5];
-}
-
 function showLevelIntro(callback) {
     const info = getBiomeInfo(saveState.level);
     introLevelNum.textContent = saveState.level;
@@ -2475,13 +3251,6 @@ function updateProgressBar() {
         : 'linear-gradient(90deg, #00e5ff, #0077ff)';
 }
 
-// ─── Level Complete star rating ───────────────────────────────────────────────
-function getStarRating(survivorCount) {
-    if (survivorCount >= 50) return '⭐⭐⭐';
-    if (survivorCount >= 20) return '⭐⭐';
-    return '⭐';
-}
-
 // ─── Event Listeners ─────────────────────────────────────────────────────────
 document.getElementById('start-btn').addEventListener('click', () => showLevelIntro(initGame));
 document.getElementById('pause-btn').addEventListener('click', pauseGame);
@@ -2523,6 +3292,129 @@ document.getElementById('iap-coins-small')?.addEventListener('click', () => purc
 document.getElementById('iap-coins-medium')?.addEventListener('click', () => purchaseIAP('coins_medium'));
 document.getElementById('iap-coins-large')?.addEventListener('click', () => purchaseIAP('coins_large'));
 document.getElementById('iap-remove-ads')?.addEventListener('click', () => purchaseIAP('remove_ads'));
+
+// Custom Sky Shop
+document.getElementById('buy-sky-nebula-btn')?.addEventListener('click', () => {
+    const isUnlocked = saveState.unlockedSkies.includes('nebula');
+    if (!isUnlocked) {
+        if (saveState.coins >= 250) {
+            saveState.coins -= 250;
+            saveState.unlockedSkies.push('nebula');
+            saveState.selectedSky = 'nebula';
+            saveGame();
+            applyBiomeSettings();
+            spawnFloatingText(0, 8, -10, "Nebula Sky Unlocked!", "#00e5ff", 3);
+        }
+    } else {
+        if (saveState.selectedSky === 'nebula') {
+            saveState.selectedSky = 'default';
+        } else {
+            saveState.selectedSky = 'nebula';
+        }
+        saveGame();
+        applyBiomeSettings();
+    }
+});
+
+document.getElementById('buy-sky-supernova-btn')?.addEventListener('click', () => {
+    const isUnlocked = saveState.unlockedSkies.includes('supernova');
+    if (!isUnlocked) {
+        if (saveState.coins >= 400) {
+            saveState.coins -= 400;
+            saveState.unlockedSkies.push('supernova');
+            saveState.selectedSky = 'supernova';
+            saveGame();
+            applyBiomeSettings();
+            spawnFloatingText(0, 8, -10, "Supernova Sky Unlocked!", "#ff5500", 3);
+        }
+    } else {
+        if (saveState.selectedSky === 'supernova') {
+            saveState.selectedSky = 'default';
+        } else {
+            saveState.selectedSky = 'supernova';
+        }
+        saveGame();
+        applyBiomeSettings();
+    }
+});
+
+// Custom Space Objects Shop (Simulated IAP)
+document.getElementById('buy-space-planet-btn')?.addEventListener('click', () => {
+    const isUnlocked = saveState.unlockedSpaceObjects.includes('planet');
+    if (!isUnlocked) {
+        if (confirm("Would you like to purchase the Giant Ringed Planet for $0.99?")) {
+            saveState.unlockedSpaceObjects.push('planet');
+            saveState.selectedSpaceObject = 'planet';
+            saveGame();
+            spawnFloatingText(0, 8, -10, "Planet Unlocked!", "#ffd700", 3);
+            Analytics.iapPurchase('space_planet', 0.99);
+        }
+    } else {
+        if (saveState.selectedSpaceObject === 'planet') {
+            saveState.selectedSpaceObject = 'none';
+        } else {
+            saveState.selectedSpaceObject = 'planet';
+        }
+        saveGame();
+    }
+});
+
+document.getElementById('buy-space-station-btn')?.addEventListener('click', () => {
+    const isUnlocked = saveState.unlockedSpaceObjects.includes('station');
+    if (!isUnlocked) {
+        if (confirm("Would you like to purchase the Orbiting Space Station for $1.99?")) {
+            saveState.unlockedSpaceObjects.push('station');
+            saveState.selectedSpaceObject = 'station';
+            saveGame();
+            spawnFloatingText(0, 8, -10, "Space Station Unlocked!", "#ffd700", 3);
+            Analytics.iapPurchase('space_station', 1.99);
+        }
+    } else {
+        if (saveState.selectedSpaceObject === 'station') {
+            saveState.selectedSpaceObject = 'none';
+        } else {
+            saveState.selectedSpaceObject = 'station';
+        }
+        saveGame();
+    }
+});
+
+// Environment Decor Upgrades
+document.getElementById('buy-decor-trees-btn')?.addEventListener('click', () => {
+    const lvl = saveState.decorTreesLvl || 0;
+    if (lvl >= 5) return;
+    const cost = getUpgradeCost(lvl, 'decor_trees');
+    if (saveState.coins >= cost) {
+        saveState.coins -= cost;
+        saveState.decorTreesLvl = lvl + 1;
+        saveGame();
+        spawnFloatingText(0, 8, -10, `Trees Upgraded to Lv ${lvl + 1}!`, "#00ff88", 3);
+    }
+});
+
+document.getElementById('buy-decor-ponds-btn')?.addEventListener('click', () => {
+    const lvl = saveState.decorPondsLvl || 0;
+    if (lvl >= 5) return;
+    const cost = getUpgradeCost(lvl, 'decor_ponds');
+    if (saveState.coins >= cost) {
+        saveState.coins -= cost;
+        saveState.decorPondsLvl = lvl + 1;
+        saveGame();
+        spawnFloatingText(0, 8, -10, `Ponds Upgraded to Lv ${lvl + 1}!`, "#00ff88", 3);
+    }
+});
+
+document.getElementById('buy-decor-animals-btn')?.addEventListener('click', () => {
+    const lvl = saveState.decorAnimalsLvl || 0;
+    if (lvl >= 5) return;
+    const cost = getUpgradeCost(lvl, 'decor_animals');
+    if (saveState.coins >= cost) {
+        saveState.coins -= cost;
+        saveState.decorAnimalsLvl = lvl + 1;
+        saveGame();
+        spawnFloatingText(0, 8, -10, `Animals Upgraded to Lv ${lvl + 1}!`, "#00ff88", 3);
+    }
+});
 
 // ─── WebGL Context Loss Handler ─────────────────────────────────────────────
 renderer.domElement.addEventListener('webglcontextlost', (e) => {
@@ -2574,28 +3466,254 @@ window.requestAnimationFrame(() => {
 
 // ─── Daily Rewards System ────────────────────────────────────────────────
 const DAILY_KEY = 'crowdRunnerDaily';
-const DAILY_REWARD = 50; // bonus coins per day
+const DAILY_STREAK_KEY = 'crowdRunnerDailyStreak';
+const DAILY_REWARDS = [50, 75, 100, 150, 200, 300, 500]; // week cycle
+const DAILY_BONUS_KEY = 'crowdRunnerDailyBonusShown';
+
+function getDailyStreak() {
+    try { return parseInt(localStorage.getItem(DAILY_STREAK_KEY) || '0'); } catch (e) { return 0; }
+}
+function setDailyStreak(v) { try { localStorage.setItem(DAILY_STREAK_KEY, v); } catch (e) { } }
 
 function checkDailyReward() {
     try {
-        const raw = localStorage.getItem(DAILY_KEY);
         const today = new Date().toDateString();
-        if (!raw || raw !== today) {
-            // First play today — grant reward
-            localStorage.setItem(DAILY_KEY, today);
-            saveState.coins += DAILY_REWARD;
-            saveGame();
-            return DAILY_REWARD;
-        }
-    } catch (e) { /* localStorage unavailable */ }
-    return 0;
+        const yesterday = new Date(Date.now() - 86400000).toDateString();
+        const last = localStorage.getItem(DAILY_KEY);
+        let streak = getDailyStreak();
+        if (!last || last !== yesterday) streak = 0;
+        if (last === today) return 0;
+        streak = Math.min(streak + 1, DAILY_REWARDS.length);
+        setDailyStreak(streak);
+        localStorage.setItem(DAILY_KEY, today);
+        const reward = DAILY_REWARDS[(streak - 1) % DAILY_REWARDS.length];
+        saveState.coins += reward; saveGame();
+        return { reward, streak };
+    } catch (e) { return 0; }
 }
 
-// Apply daily reward when game starts
-const dailyBonus = checkDailyReward();
-if (dailyBonus > 0) {
-    console.log('[CrowdRunner] Daily login bonus: ' + dailyBonus + ' coins!');
+function renderDailyGrid() {
+    const grid = document.getElementById('daily-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const streak = getDailyStreak();
+    for (let i = 0; i < 7; i++) {
+        const day = i + 1;
+        const claimed = day < streak;
+        const isToday = day === streak + 1;
+        const reward = DAILY_REWARDS[i];
+        const cell = document.createElement('div');
+        cell.style.cssText = `background:${claimed ? 'rgba(0,255,136,0.15)' : isToday ? 'rgba(255,215,0,0.25)' : 'rgba(255,255,255,0.06)'};border:1px solid ${claimed ? 'rgba(0,255,136,0.4)' : isToday ? 'rgba(255,215,0,0.6)' : 'rgba(255,255,255,0.1)'};border-radius:12px;padding:10px 6px;text-align:center;`;
+        cell.innerHTML = `<div style="font-size:11px;color:rgba(255,255,255,0.5);">Day ${day}</div><div style="font-size:18px;margin:4px 0;">${claimed ? '✅' : isToday ? '🎁' : '🪙'}</div><div style="font-size:12px;font-weight:700;color:${claimed ? '#00ff88' : isToday ? '#ffd700' : '#fff'};">${reward}</div>`;
+        grid.appendChild(cell);
+    }
+    const claimDay = document.getElementById('claim-day-num');
+    if (claimDay) claimDay.textContent = Math.min(streak + 1, 7);
+    const streakText = document.getElementById('daily-streak-text');
+    if (streakText) streakText.textContent = `Day ${Math.min(streak + 1, 7)} of 7 — tap to claim`;
+}
+
+document.getElementById('daily-reward-banner')?.addEventListener('click', () => {
+    renderDailyGrid();
+    document.getElementById('daily-reward-overlay').style.display = 'flex';
+});
+document.getElementById('claim-daily-btn')?.addEventListener('click', () => {
+    const result = checkDailyReward();
+    if (result && result.reward) {
+        spawnFloatingText(0, 8, -10, `+${result.reward} coins`, '#ffd700', 3);
+        SoundEngine.victory();
+        renderDailyGrid();
+        updateShopUI();
+        setTimeout(() => document.getElementById('daily-reward-overlay').style.display = 'none', 600);
+    } else {
+        alert('Already claimed today! Come back tomorrow.');
+    }
+});
+
+// ─── Battle Pass System ──────────────────────────────────────────────────
+const BPASS_KEY = 'crowdRunnerBattlePass';
+const BPASS_SEASON = 1;
+const BPASS_XP_PER_LEVEL = 500;
+const BPASS_LEVELS = 30;
+const BPASS_REWARDS_FREE = [50, 75, 100, 150, 200, 250, 300, 400, 500, 600];
+const BPASS_REWARDS_PREMIUM = [200, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 4000];
+
+function loadBattlePass() {
+    try {
+        const raw = localStorage.getItem(BPASS_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch (e) { }
+    return { season: BPASS_SEASON, xp: 0, level: 1, purchased: false, freeClaimed: [], premiumClaimed: [] };
+}
+function saveBattlePass(bp) { try { localStorage.setItem(BPASS_KEY, JSON.stringify(bp)); } catch (e) { } }
+function addBattlePassXP(amount) {
+    const bp = loadBattlePass();
+    if (bp.season !== BPASS_SEASON) { bp.season = BPASS_SEASON; bp.xp = 0; bp.level = 1; bp.freeClaimed = []; bp.premiumClaimed = []; }
+    bp.xp += amount;
+    const newLevel = Math.min(1 + Math.floor(bp.xp / BPASS_XP_PER_LEVEL), BPASS_LEVELS);
+    if (newLevel > bp.level) {
+        bp.level = newLevel;
+        spawnFloatingText(0, 10, -10, `Battle Pass Lv${newLevel}!`, '#ffd700', 4);
+        SoundEngine.victory();
+    }
+    saveBattlePass(bp);
+    updateBattlePassUI();
+}
+function updateBattlePassUI() {
+    const bp = loadBattlePass();
+    const xpEl = document.getElementById('bpass-xp');
+    const barEl = document.getElementById('bpass-xp-bar');
+    if (xpEl) xpEl.textContent = bp.xp;
+    if (barEl) {
+        const pct = Math.min(100, ((bp.xp % BPASS_XP_PER_LEVEL) / BPASS_XP_PER_LEVEL) * 100);
+        barEl.style.width = pct + '%';
+    }
+}
+document.getElementById('buy-battle-pass')?.addEventListener('click', () => {
+    const bp = loadBattlePass();
+    if (bp.purchased) { alert('Battle Pass already purchased this season!'); return; }
+    if (saveState.coins < 499) { alert('Not enough coins. Need 499 coins.'); return; }
+    saveState.coins -= 499;
+    bp.purchased = true;
+    saveBattlePass(bp); saveGame(); updateShopUI(); updateBattlePassUI();
+    spawnFloatingText(0, 8, -10, 'Battle Pass Unlocked!', '#ffd700', 4);
+    SoundEngine.victory();
+});
+
+// Grant XP on level complete
+function grantBattlePassXP(amount) { addBattlePassXP(amount); }
+
+// ─── Event System ────────────────────────────────────────────────────────
+const EVENT_KEY = 'crowdRunnerEvent';
+function loadEvent() {
+    try {
+        const raw = localStorage.getItem(EVENT_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch (e) { }
+    return { active: true, name: 'Weekend Frenzy', end: Date.now() + 48 * 3600 * 1000, multiplier: 2.0 };
+}
+function saveEvent(e) { try { localStorage.setItem(EVENT_KEY, JSON.stringify(e)); } catch (e) { } }
+function getEventMultiplier() {
+    const ev = loadEvent();
+    if (!ev.active || Date.now() > ev.end) return 1.0;
+    return ev.multiplier;
+}
+function updateEventTimer() {
+    const ev = loadEvent();
+    const el = document.getElementById('event-timer-text');
+    if (!el) return;
+    const diff = Math.max(0, ev.end - Date.now());
+    const d = Math.floor(diff / 86400000); const h = Math.floor((diff % 86400000) / 3600000); const m = Math.floor((diff % 3600000) / 60000);
+    el.textContent = `Ends in ${d}d ${h}h ${m}m`;
+    if (diff === 0) { ev.active = false; saveEvent(ev); }
+}
+setInterval(updateEventTimer, 60000);
+updateEventTimer();
+
+// ─── Leaderboard System ──────────────────────────────────────────────────
+const LB_KEY = 'crowdRunnerLeaderboard';
+function loadLeaderboard() {
+    try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveLeaderboard(lb) { try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch (e) { } }
+function submitScore(score) {
+    const lb = loadLeaderboard();
+    const entry = { score, level: saveState.level, date: Date.now() };
+    lb.push(entry);
+    lb.sort((a, b) => b.score - a.score);
+    const trimmed = lb.slice(0, 20);
+    saveLeaderboard(trimmed);
+    return trimmed;
+}
+function renderLeaderboard() {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+    const lb = loadLeaderboard();
+    list.innerHTML = '';
+    if (lb.length === 0) { list.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;">No scores yet. Play a level!</div>'; return; }
+    lb.forEach((e, i) => {
+        const row = document.createElement('div');
+        row.className = 'shop-row';
+        row.style.background = 'rgba(255,255,255,0.04)';
+        row.style.border = '1px solid rgba(255,255,255,0.08)';
+        row.style.borderRadius = '10px';
+        row.style.padding = '10px';
+        row.innerHTML = `<div class="shop-info"><span class="shop-name">#${i + 1} — Lv ${e.level}</span><span class="shop-level">${e.score} pts • ${new Date(e.date).toLocaleDateString()}</span></div>`;
+        list.appendChild(row);
+    });
+}
+document.getElementById('clear-leaderboard-btn')?.addEventListener('click', () => {
+    if (confirm('Clear all leaderboard scores?')) { saveLeaderboard([]); renderLeaderboard(); }
+});
+
+// ─── Rewarded Ad Stubs ───────────────────────────────────────────────────
+function showRewardedAd(rewardType) {
+    console.log('[CrowdRunner] Show rewarded ad for:', rewardType);
+    alert('Rewarded ad would play here.\n\n(Integrate AdMob/AdManager SDK in production.)');
+    // Example reward grants:
+    if (rewardType === 'coins') {
+        const bonus = 100 * getEventMultiplier();
+        saveState.coins += Math.floor(bonus);
+        saveGame(); updateShopUI();
+        spawnFloatingText(0, 8, -10, `+${Math.floor(bonus)} coins (Ad)`, '#00ffff', 3);
+    } else if (rewardType === 'revive') {
+        if (gameState === 'gameover') {
+            troops.push({ x: playerCenterX, z: 0, offsetX: 0, offsetZ: 0, state: 'running', animOffset: Math.random() * 10, fightTimer: 0, color: new THREE.Color(0x00e5ff) });
+            gameState = 'playing';
+            gameOverScreen.style.display = 'none';
+            scoreDisplay.style.display = 'flex';
+        }
+    }
+}
+
+// ─── Analytics Event Stubs ───────────────────────────────────────────────
+const Analytics = {
+    event(name, params) { console.log('[Analytics]', name, params); },
+    levelStart(lvl) { this.event('level_start', { level: lvl }); },
+    levelComplete(lvl, survivors) { this.event('level_complete', { level: lvl, survivors }); },
+    iapPurchase(productId, price) { this.event('iap_purchase', { productId, price }); },
+    adWatched(adType) { this.event('ad_watched', { type: adType }); },
+};
+
+// Hook into existing game flows for analytics
+const _origInit = initGame;
+initGame = function () {
+    Analytics.levelStart(saveState.level);
+    _origInit();
+};
+const _origVictory = () => { };
+// Track level complete via level complete button
+document.getElementById('next-level-btn')?.addEventListener('click', () => {
+    Analytics.levelComplete(saveState.level - 1, troops.length);
+    // Bonus XP for battle pass
+    grantBattlePassXP(50 * getEventMultiplier());
+});
+
+// Track IAP purchases
+['iap-coins-small', 'iap-coins-medium', 'iap-coins-large', 'iap-value-pack', 'iap-remove-ads', 'buy-battle-pass'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', () => {
+        const btn = document.getElementById(id);
+        const price = btn?.textContent?.trim() || '$';
+        Analytics.iapPurchase(id, price);
+    });
+});
+
+function animate(timestamp) {
+    requestAnimationFrame(animate);
+    timer.update(timestamp);
+    const dt = Math.min(timer.getDelta(), 0.1);
+    updateGame(dt);
+    composer.render();
 }
 
 // ─── Start the loop ──────────────────────────────────────────────────────
-loadSave(); animate();
+loadSave();
+
+// Apply daily reward when game starts
+const dailyResult = checkDailyReward();
+if (dailyResult && dailyResult.reward) console.log('[CrowdRunner] Daily login bonus: ' + dailyResult.reward + ' coins!');
+
+renderDailyGrid();
+updateBattlePassUI();
+renderLeaderboard();
+animate();

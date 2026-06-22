@@ -1,9 +1,3 @@
-export function setupCounter(element) {
-  let counter = 0
-  const setCounter = (count) => {
-    counter = count
-    element.innerHTML = `Count is ${counter}`
-  }
-  element.addEventListener('click', () => setCounter(counter + 1))
-  setCounter(0)
-}
+// ─── DEPRECATED ─────────────────────────────────────────────────────────
+// This file was Vite boilerplate and is no longer used.
+// All game logic lives in /main.js and its imported modules.

@@ -59,13 +59,16 @@ body, html {
 .screen {
   position: absolute; inset: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   pointer-events: auto;
   background: var(--overlay-dark);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   animation: screenFadeIn 0.3s ease;
+  overflow-y: auto;
+  touch-action: pan-y;
+  padding: 40px 12px;
 }
 
 @keyframes screenFadeIn {
@@ -86,6 +89,7 @@ body, html {
   flex-direction: column;
   align-items: center;
   gap: 16px;
+  margin: auto;
 }
 
 /* ══════════════════════════════════════════
@@ -768,5 +772,18 @@ button:disabled { background: #444; color: #777; cursor: not-allowed; transform:
 @keyframes magnetBadgePulse {
   0%, 100% { box-shadow: 0 0 8px rgba(255,0,255,0.5); }
   50%       { box-shadow: 0 0 20px rgba(255,0,255,1.0), 0 0 40px rgba(150,0,200,0.6); }
+}
+
+/* Customization states */
+.btn-shop.selected {
+  background: linear-gradient(135deg, var(--green-ok), #00bb66) !important;
+  color: #000 !important;
+  box-shadow: 0 0 10px rgba(0,255,136,0.3) !important;
+  cursor: default;
+}
+.btn-shop.equip {
+  background: linear-gradient(135deg, var(--utopia-accent), #0077ff) !important;
+  color: #fff !important;
+  box-shadow: none !important;
 }
 
