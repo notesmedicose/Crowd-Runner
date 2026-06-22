@@ -127,6 +127,7 @@
           ▶ &nbsp;Play Level <span id="start-level-display2">1</span>
         </button>
 
+        <!-- ══════════ UPGRADE SHOP ══════════ -->
         <div id="shop" class="shop-panel" style="display: flex; flex-direction: column; gap: 10px;">
           <div class="shop-title">🏪 Upgrade Shop</div>
 
@@ -158,6 +159,61 @@
             <button id="buy-magnet-btn" class="btn-shop">
               🪙 <span id="upg-magnet-cost">15</span>
             </button>
+          </div>
+        </div>
+
+        <!-- ══════════ IAP SHOP ══════════ -->
+        <div id="iap-shop" class="shop-panel"
+          style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+          <div class="shop-title">💎 Coin Packs</div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🪙 Small Pack</span>
+              <span class="shop-level">500 coins</span>
+            </div>
+            <button id="iap-coins-small" class="btn-shop btn-iap">
+              $0.99
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🪙 Medium Pack</span>
+              <span class="shop-level">2000 coins</span>
+            </div>
+            <button id="iap-coins-medium" class="btn-shop btn-iap">
+              $2.99
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🪙 Large Pack</span>
+              <span class="shop-level">10000 coins</span>
+            </div>
+            <button id="iap-coins-large" class="btn-shop btn-iap">
+              $9.99
+            </button>
+          </div>
+
+          <div class="shop-row">
+            <div class="shop-info">
+              <span class="shop-name">🚫 Remove Ads</span>
+              <span class="shop-level">Permanent</span>
+            </div>
+            <button id="iap-remove-ads" class="btn-shop btn-iap">
+              $1.99
+            </button>
+          </div>
+        </div>
+
+        <!-- ══════════ ACHIEVEMENTS ══════════ -->
+        <div id="achievements-panel" class="shop-panel"
+          style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+          <div class="shop-title">🏆 Achievements</div>
+          <div id="achievements-list" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- Populated by JS -->
           </div>
         </div>
 

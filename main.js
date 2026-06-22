@@ -129,6 +129,261 @@ const SoundEngine = {
     victory() { this.playTone(400, 'sine', 0.2, 0.1); setTimeout(() => this.playTone(500, 'sine', 0.2, 0.1), 200); setTimeout(() => this.playTone(600, 'sine', 0.4, 0.1), 400); }
 };
 
+// ─── Background Music Engine ─────────────────────────────────────────────────
+let musicNodes = null;
+let musicGain = null;
+let currentMusicBiome = '';
+
+function startMusic(biome) {
+    if (isMuted || audioCtx.state === 'closed') return;
+    if (biome === currentMusicBiome && musicNodes) return; // already playing this biome
+    stopMusic();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    currentMusicBiome = biome;
+    musicGain = audioCtx.createGain();
+    musicGain.gain.setValueAtTime(0.15, audioCtx.currentTime); // master volume
+    musicGain.connect(audioCtx.destination);
+
+    const nodes = [];
+    const now = audioCtx.currentTime;
+
+    if (biome === 'utopia') {
+        // Bright major chord arpeggio
+        const freqs = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63];
+        freqs.forEach((f, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine'; osc.frequency.value = f;
+            gain.gain.setValueAtTime(0, now + i * 0.8);
+            gain.gain.linearRampToValueAtTime(0.12, now + i * 0.8 + 0.1);
+            gain.gain.linearRampToValueAtTime(0, now + i * 0.8 + 0.6);
+            osc.connect(gain); gain.connect(musicGain);
+            osc.start(now + i * 0.8); osc.stop(now + i * 0.8 + 0.6);
+            nodes.push(osc, gain);
+        });
+        // Pad drone
+        const pad = audioCtx.createOscillator();
+        const padGain = audioCtx.createGain();
+        pad.type = 'sawtooth'; pad.frequency.value = 130.81;
+        padGain.gain.setValueAtTime(0.04, now);
+        pad.connect(padGain); padGain.connect(musicGain);
+        pad.start(now); nodes.push(pad, padGain);
+    } else if (biome === 'wasteland') {
+        // Dark minor drone
+        const osc = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const g = audioCtx.createGain(); const g2 = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.value = 60;
+        osc2.type = 'square'; osc2.frequency.value = 90;
+        g.gain.setValueAtTime(0.08, now); g2.gain.setValueAtTime(0.04, now);
+        osc.connect(g); osc2.connect(g2); g.connect(musicGain); g2.connect(musicGain);
+        osc.start(now); osc2.start(now); nodes.push(osc, osc2, g, g2);
+    } else if (biome === 'neon') {
+        // Upbeat synth arpeggio
+        const bpm = 0.25;
+        for (let i = 0; i < 16; i++) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            const f = 220 + Math.sin(i * 1.5) * 110 + 110;
+            osc.type = 'square'; osc.frequency.value = Math.max(50, f);
+            g.gain.setValueAtTime(0, now + i * bpm);
+            g.gain.linearRampToValueAtTime(0.06, now + i * bpm + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, now + i * bpm + bpm * 0.9);
+            osc.connect(g); g.connect(musicGain);
+            osc.start(now + i * bpm); osc.stop(now + i * bpm + bpm);
+            nodes.push(osc, g);
+        }
+    } else if (biome === 'tundra') {
+        // Wind-like noise pad
+        for (let i = 0; i < 3; i++) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'sine'; osc.frequency.value = 100 + i * 40;
+            g.gain.setValueAtTime(0.03 + Math.random() * 0.02, now);
+            g.gain.linearRampToValueAtTime(0.01, now + 4);
+            osc.connect(g); g.connect(musicGain);
+            osc.start(now); nodes.push(osc, g);
+        }
+    } else if (biome === 'lava') {
+        // Aggressive low rumble
+        for (let i = 0; i < 2; i++) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'sawtooth'; osc.frequency.value = 40 + i * 15;
+            g.gain.setValueAtTime(0.1, now);
+            osc.connect(g); g.connect(musicGain);
+            osc.start(now); nodes.push(osc, g);
+        }
+    }
+    musicNodes = nodes;
+}
+
+function stopMusic() {
+    if (musicNodes) {
+        musicNodes.forEach(n => {
+            try { n.stop(); } catch (e) { }
+            try { n.disconnect(); } catch (e) { }
+        });
+        musicNodes = null;
+    }
+    if (musicGain) { try { musicGain.disconnect(); } catch (e) { } musicGain = null; }
+    currentMusicBiome = '';
+}
+
+// ─── Haptic Feedback ────────────────────────────────────────────────────────
+function hapticShort() { try { navigator.vibrate && navigator.vibrate(10); } catch (e) { } }
+function hapticMedium() { try { navigator.vibrate && navigator.vibrate(25); } catch (e) { } }
+function hapticLong() { try { navigator.vibrate && navigator.vibrate(50); } catch (e) { } }
+function hapticDouble() { try { navigator.vibrate && navigator.vibrate([15, 30, 15]); } catch (e) { } }
+function hapticBuzz() { try { navigator.vibrate && navigator.vibrate(8); } catch (e) { } }
+
+// ─── Achievement System ─────────────────────────────────────────────────────
+const ACHIEVEMENTS = {
+    FIRST_BLOOD: { id: 'first_blood', name: 'First Blood', desc: 'Complete Level 1' },
+    ARMY_BUILDER: { id: 'army_builder', name: 'Army Builder', desc: 'Reach 100 troops' },
+    UNSTOPPABLE: { id: 'unstoppable', name: 'Unstoppable', desc: 'Complete Level 10' },
+    RICH: { id: 'rich', name: 'Rich', desc: 'Collect 1000 coins total' },
+    BOSS_HUNTER: { id: 'boss_hunter', name: 'Boss Hunter', desc: 'Kill 10 bosses' }
+};
+const ACHIEVEMENTS_KEY = 'crowdRunnerAchievements';
+let unlockedAchievements = {};
+let achievementStats = { totalCoinsCollected: 0, bossesKilled: 0 };
+
+function loadAchievements() {
+    try {
+        const raw = localStorage.getItem(ACHIEVEMENTS_KEY);
+        if (raw) {
+            const data = JSON.parse(raw);
+            unlockedAchievements = data.unlocked || {};
+            achievementStats = data.stats || { totalCoinsCollected: 0, bossesKilled: 0 };
+        }
+    } catch (e) { unlockedAchievements = {}; achievementStats = { totalCoinsCollected: 0, bossesKilled: 0 }; }
+}
+function saveAchievements() {
+    try { localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify({ unlocked: unlockedAchievements, stats: achievementStats })); } catch (e) { }
+}
+function unlockAchievement(id) {
+    if (!ACHIEVEMENTS[id] || unlockedAchievements[id]) return;
+    unlockedAchievements[id] = true;
+    saveAchievements();
+    console.log('[CrowdRunner] Achievement unlocked:', ACHIEVEMENTS[id].name);
+    spawnFloatingText(playerCenterX, 8, -10, '🏆 ' + ACHIEVEMENTS[id].name, '#ffd700', 4);
+    SoundEngine.victory();
+}
+function checkAchievements() {
+    if (!unlockedAchievements.first_blood && saveState.level >= 2) unlockAchievement('first_blood');
+    if (!unlockedAchievements.army_builder && troops.length >= 100) unlockAchievement('army_builder');
+    if (!unlockedAchievements.unstoppable && saveState.level >= 11) unlockAchievement('unstoppable');
+    if (!unlockedAchievements.rich && achievementStats.totalCoinsCollected >= 1000) unlockAchievement('rich');
+    if (!unlockedAchievements.boss_hunter && achievementStats.bossesKilled >= 10) unlockAchievement('boss_hunter');
+}
+function renderAchievements() {
+    const list = document.getElementById('achievements-list');
+    if (!list) return;
+    list.innerHTML = '';
+    Object.values(ACHIEVEMENTS).forEach(a => {
+        const done = !!unlockedAchievements[a.id];
+        const row = document.createElement('div');
+        row.className = 'shop-row';
+        row.style.opacity = done ? '1' : '0.5';
+        row.innerHTML = `
+          <div class="shop-info">
+            <span class="shop-name">${done ? '✅' : '🔒'} ${a.name}</span>
+            <span class="shop-level">${a.desc}</span>
+          </div>
+        `;
+        list.appendChild(row);
+    });
+}
+function showAchievements() {
+    renderAchievements();
+    const panel = document.getElementById('achievements-panel');
+    if (panel) panel.style.display = 'flex';
+}
+function submitScore(score) { console.log('[CrowdRunner] Score submitted:', score); }
+function showLeaderboard() { console.log('[CrowdRunner] Show leaderboard UI'); }
+
+// ─── Player Skin System ─────────────────────────────────────────────────────
+const SKINS_KEY = 'crowdRunnerSkins';
+const DEFAULT_SKIN = 'cyan';
+const AVAILABLE_SKINS = [
+    { id: 'cyan', name: 'Cyan', color: 0x00e5ff, cost: 0, unlocked: true },
+    { id: 'gold', name: 'Gold', color: 0xffd700, cost: 100, unlocked: false },
+    { id: 'crimson', name: 'Crimson', color: 0xff3333, cost: 100, unlocked: false },
+    { id: 'neon-green', name: 'Neon Green', color: 0x00ff66, cost: 150, unlocked: false },
+    { id: 'purple', name: 'Purple', color: 0xaa00ff, cost: 150, unlocked: false },
+];
+let unlockedSkins = ['cyan'];
+let selectedSkin = DEFAULT_SKIN;
+
+function loadSkins() {
+    try {
+        const raw = localStorage.getItem(SKINS_KEY);
+        if (raw) {
+            const data = JSON.parse(raw);
+            unlockedSkins = Array.isArray(data.unlocked) ? data.unlocked : ['cyan'];
+            selectedSkin = data.selected || DEFAULT_SKIN;
+            if (!unlockedSkins.includes(selectedSkin)) selectedSkin = DEFAULT_SKIN;
+        }
+    } catch (e) { unlockedSkins = ['cyan']; selectedSkin = DEFAULT_SKIN; }
+}
+function saveSkins() {
+    try { localStorage.setItem(SKINS_KEY, JSON.stringify({ unlocked: unlockedSkins, selected: selectedSkin })); } catch (e) { }
+}
+function getSkinColor(skinId) {
+    const skin = AVAILABLE_SKINS.find(s => s.id === skinId);
+    return skin ? skin.color : 0x00e5ff;
+}
+function buySkin(skinId) {
+    const skin = AVAILABLE_SKINS.find(s => s.id === skinId);
+    if (!skin || unlockedSkins.includes(skinId)) return false;
+    if (saveState.coins < skin.cost) return false;
+    saveState.coins -= skin.cost;
+    unlockedSkins.push(skinId);
+    saveSkins(); saveGame();
+    return true;
+}
+function selectSkin(skinId) {
+    if (!unlockedSkins.includes(skinId)) return false;
+    selectedSkin = skinId;
+    saveSkins();
+    return true;
+}
+
+// ─── IAP Shop Stubs ─────────────────────────────────────────────────────────
+const IAP_PRODUCTS = [
+    { id: 'coins_small', name: 'Coin Pack (500)', price: '$0.99', coins: 500 },
+    { id: 'coins_medium', name: 'Coin Pack (2000)', price: '$2.99', coins: 2000 },
+    { id: 'coins_large', name: 'Coin Pack (10000)', price: '$9.99', coins: 10000 },
+    { id: 'remove_ads', name: 'Remove Ads', price: '$1.99', coins: 0 },
+];
+let iapPurchases = {};
+function loadIAP() {
+    try {
+        const raw = localStorage.getItem('crowdRunnerIAP');
+        if (raw) iapPurchases = JSON.parse(raw);
+    } catch (e) { iapPurchases = {}; }
+}
+function saveIAP() {
+    try { localStorage.setItem('crowdRunnerIAP', JSON.stringify(iapPurchases)); } catch (e) { }
+}
+function purchaseIAP(productId) {
+    const product = IAP_PRODUCTS.find(p => p.id === productId);
+    if (!product) return false;
+    console.log('[CrowdRunner] IAP Purchase:', product.name, product.price);
+    // Placeholder: integrate with Capacitor IAP plugin here
+    // For testing, grant coins immediately
+    if (product.coins > 0) {
+        saveState.coins += product.coins;
+        saveGame();
+    }
+    if (product.id === 'remove_ads') {
+        iapPurchases.remove_ads = true;
+        saveIAP();
+    }
+    return true;
+}
+
 // --- Game Tuning Constants ---
 const SCROLL_SPEED_BASE = 40;    // World units per second (base run speed)
 const SCROLL_SPEED_FIGHT = 0.2;   // Multiplier applied when troops are fighting
@@ -208,6 +463,7 @@ function loadSave() {
         console.warn('[CrowdRunner] Failed to parse save data:', e);
         saveState = { ...DEFAULT_SAVE };
     }
+    loadAchievements();
     updateShopUI();
 }
 function saveGame() { localStorage.setItem(SAVE_KEY, JSON.stringify(saveState)); updateShopUI(); }
@@ -764,6 +1020,27 @@ function applyBiomeSettings() {
         lakeMat.color.setHex(0xff3300); lakeMat.emissive.setHex(0xff2200); lakeMat.emissiveIntensity = 1.3; lakeMat.roughness = 0.9; lakeMat.metalness = 0.0; // Boiling lava
         mountMat.color.setHex(0x221511);
         treeConeMat.color.setHex(0x401509); // Charcoal trees
+    } else if (currentBiome === 'dune') {
+        grassMat.color.setHex(0xc2a261); // Sandy dunes
+        bldgMesh.material = bldgMatUtopia;
+        lakeMat.color.setHex(0xffcc00); lakeMat.emissive.setHex(0x000000); lakeMat.roughness = 1.0; lakeMat.metalness = 0.0;
+        mountMat.color.setHex(0xd9a96b);
+        treeConeMat.color.setHex(0x8c7b50);
+        roadMat.emissive = new THREE.Color(0x221100); roadMat.emissiveIntensity = 0.1;
+    } else if (currentBiome === 'crystal') {
+        grassMat.color.setHex(0x1a0a2e); // Deep purple ground
+        bldgMesh.material = bldgMatNeon;
+        lakeMat.color.setHex(0xaa00ff); lakeMat.emissive.setHex(0xaa00ff); lakeMat.emissiveIntensity = 0.8; lakeMat.roughness = 0.1; lakeMat.metalness = 0.95;
+        mountMat.color.setHex(0x2a1040);
+        treeConeMat.color.setHex(0xff55ff);
+        roadMat.emissive = new THREE.Color(0x110022); roadMat.emissiveIntensity = 0.15;
+    } else if (currentBiome === 'void') {
+        grassMat.color.setHex(0x050208); // Near-black void ground
+        bldgMesh.material = bldgMatLava;
+        lakeMat.color.setHex(0x6600ff); lakeMat.emissive.setHex(0x4400aa); lakeMat.emissiveIntensity = 1.1; lakeMat.roughness = 0.0; lakeMat.metalness = 1.0;
+        mountMat.color.setHex(0x0a0512);
+        treeConeMat.color.setHex(0x220033);
+        roadMat.emissive = new THREE.Color(0x000000); roadMat.emissiveIntensity = 0.2;
     }
 }
 
@@ -1555,6 +1832,7 @@ function updateTextSprites(dt) {
 // --- Logic ---
 function initGame() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    checkAchievements();
 
     troops = []; gates.forEach(g => {
         scene.remove(g.mesh);
@@ -1596,8 +1874,10 @@ function initGame() {
     applyBiomeSettings();
 
     let startCount = saveState.upgradeTroops;
+    const skinColor = new THREE.Color(getSkinColor(selectedSkin));
     for (let i = 0; i < startCount; i++) {
-        let col = new THREE.Color().setHSL(0.5 + (Math.random() - 0.5) * 0.15, 0.95, 0.5);
+        const variation = 0.85 + Math.random() * 0.3;
+        const col = skinColor.clone().multiplyScalar(variation);
         troops.push({ x: 0, z: 0, offsetX: (Math.random() - 0.5) * 5, offsetZ: (Math.random() - 0.5) * 5, state: 'running', animOffset: Math.random() * 10, fightTimer: 0, color: col });
     }
 
@@ -1755,7 +2035,7 @@ function updateGame(dt) {
                     }
 
                     let finalDeathChance = Math.max(0.04, TROOP_DEATH_CHANCE - (saveState.upgradeAttack - 1) * 0.02);
-                    if (Math.random() < finalDeathChance) { t.dead = true; spawnParticles(t.x, 1, t.z, 0xff3333, 5); }
+                    if (Math.random() < finalDeathChance) { t.dead = true; spawnParticles(t.x, 1, t.z, 0xff3333, 5); hapticBuzz(); }
 
                     // Enemy kill
                     if (t.targetEnemy.hp <= 0 && !t.targetEnemy.dead) {
@@ -1822,10 +2102,10 @@ function updateGame(dt) {
         spawnEnvironmentObjects();
         if (distance % GATE_SPAWN_INTERVAL < effectiveScrollSpeed * dt) {
             let r = Math.random();
-            if (r < 0.35) spawnGates();
-            else if (r < 0.55) spawnEnemies();
-            else if (r < 0.70) spawnObstacle();
-            else if (r < 0.82) spawnPowerup();
+            if (r < 0.30) spawnGates();
+            else if (r < 0.50) spawnEnemies();
+            else if (r < 0.65) spawnObstacle();
+            else if (r < 0.80) spawnPowerup();
             else spawnCoins();
         }
     } else if (!finishLineSpawned) spawnFinishLine();
@@ -2113,7 +2393,10 @@ const BIOME_INFO = [
     { name: 'Wasteland Night', badge: 'WASTELAND', accent: '#ff4422', desc: 'Survive the ruins. The enemies are stronger here.', nextName: 'Neon City Night' },
     { name: 'Neon City Night', badge: 'NEON CITY', accent: '#ff00ff', desc: 'Slick cyberpunk speedway. Watch your corners.', nextName: 'Arctic Tundra' },
     { name: 'Arctic Tundra', badge: 'TUNDRA', accent: '#aaddff', desc: 'Battle through freezing snow and icy winds.', nextName: 'Lava Fields' },
-    { name: 'Lava Fields', badge: 'LAVA FIELDS', accent: '#ff4500', desc: 'Avoid boiling lava pools and ash clouds.', nextName: 'Utopia Day' }
+    { name: 'Lava Fields', badge: 'LAVA FIELDS', accent: '#ff4500', desc: 'Avoid boiling lava pools and ash clouds.', nextName: 'Dune Desert' },
+    { name: 'Dune Desert', badge: 'DUNE', accent: '#ffaa00', desc: 'Scorchingly hot sands. Burst gates appear here.', nextName: 'Crystal Caves' },
+    { name: 'Crystal Caves', badge: 'CRYSTAL', accent: '#aa00ff', desc: 'Prismatic tunnels. Shards grant random multipliers.', nextName: 'Void Abyss' },
+    { name: 'Void Abyss', badge: 'VOID', accent: '#8800ff', desc: 'Reality warps. Expect the impossible.', nextName: 'Utopia Day' }
 ];
 
 function getBiomeInfo(level) {
@@ -2165,6 +2448,7 @@ function resumeGame() {
     gameState = 'playing';
 }
 function goToMainMenu() {
+    stopMusic();
     gameState = 'menu';
     pauseScreen.style.display = 'none';
     gameOverScreen.style.display = 'none';
@@ -2233,6 +2517,12 @@ buyMagnetBtn.addEventListener('click', () => {
         saveState.upgradeMagnet++; saveGame();
     }
 });
+
+// IAP Shop buttons
+document.getElementById('iap-coins-small')?.addEventListener('click', () => purchaseIAP('coins_small'));
+document.getElementById('iap-coins-medium')?.addEventListener('click', () => purchaseIAP('coins_medium'));
+document.getElementById('iap-coins-large')?.addEventListener('click', () => purchaseIAP('coins_large'));
+document.getElementById('iap-remove-ads')?.addEventListener('click', () => purchaseIAP('remove_ads'));
 
 // ─── WebGL Context Loss Handler ─────────────────────────────────────────────
 renderer.domElement.addEventListener('webglcontextlost', (e) => {
