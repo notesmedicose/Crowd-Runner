@@ -1,0 +1,24 @@
+{
+  "name": "Crowd Brawler 3D",
+  "short_name": "Crowd Runner",
+  "description": "Lead your crowd to victory through gates, battles, and biomes in Crowd Brawler 3D — a fast-paced 3D runner.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00e5ff",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
